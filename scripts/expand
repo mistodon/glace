@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -eu
+set -o pipefail
+
+(cd testcrate && cargo +nightly expand --lib)

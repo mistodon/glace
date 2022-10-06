@@ -1,0 +1,20 @@
+[package]
+name = "assist"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["image", "serde_json"]
+image = ["dep:image", "assist_proc_macro/image"]
+serde = ["dep:serde"]
+serde_json = ["serde", "dep:serde_json", "assist_proc_macro/serde_json"]
+visit_includes_skipped = []
+
+[dependencies]
+assist_proc_macro = { path = "./assist_proc_macro" }
+ignore = "0.4"
+image = { version = "0.24", optional = true }
+lazy_static = "1.0"
+serde = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true }
+thiserror = "1.0"

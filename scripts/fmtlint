@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -eu
+set -o pipefail
+
+(cd assist_proc_macro && cargo fmt)
+(cd testcrate && cargo fmt)
+cargo fmt
+
+(cd assist_proc_macro && cargo clippy)
+(cd testcrate && cargo clippy)
+cargo clippy
