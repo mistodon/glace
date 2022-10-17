@@ -1,13 +1,27 @@
 pub mod cache;
+pub mod load;
 
 pub use assist_proc_macro::assist;
+pub use indexmap::IndexMap;
+pub use lazy_static::lazy_static;
 
 use std::borrow::Cow;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::Arc;
 use std::time::SystemTime;
 
+use parking_lot::RwLock;
 use thiserror::Error;
+
+use crate::cache::RwCache;
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
+pub enum PathedKey<'a> {
+    Known(&'a str),
+    Path { path: &'a Path },
+}
 
 #[derive(Debug, Error)]
 pub enum AssistError {
@@ -16,6 +30,12 @@ pub enum AssistError {
 
     #[error("No Path cached for the given index: `{0}`\nUse the `from_path` method instead of constructing a `_Path(_)` variant directly.")]
     NoPathCached(u32),
+
+    #[error("No name cached for the given index: `{0}`\nUse the `from_name` method instead of constructing an `_Unknown(_)` variant directly.")]
+    NoNameCached(u32),
+
+    #[error("Disk IO is disabled so this load will always fail")]
+    DiskIoDisabled,
 
     #[error("IO error")]
     Io(#[from] std::io::Error),
@@ -28,6 +48,42 @@ pub enum AssistError {
 }
 
 pub type Result<T> = std::result::Result<T, AssistError>;
+
+pub trait FileAsset: Sized {
+    const PARENT: &'static str;
+
+    fn from_const_name(name: &str) -> Option<Self>;
+    fn from_const_path(path: &Path) -> Option<Self>;
+    fn from_path_unchecked(path: &Path) -> Self;
+    fn try_path(self) -> Result<Cow<'static, Path>>;
+
+    fn from_path(path: &Path) -> Self {
+        Self::try_from_path(path).unwrap()
+    }
+
+    fn try_from_path(path: &Path) -> Result<Self> {
+        internal::verify_parent(path, Self::PARENT.as_ref())?;
+        Ok(Self::from_path_unchecked(path))
+    }
+
+    fn path(self) -> Cow<'static, Path> {
+        self.try_path().unwrap()
+    }
+}
+
+pub trait VirtualAsset: Sized {
+    const PATH: &'static str;
+
+    fn try_load_all(bytes: &[u8]) -> Result<IndexMap<Self, Vec<u8>>>;
+
+    fn from_const_name(name: &str) -> Option<Self>;
+    fn from_name(name: &str) -> Self;
+    fn try_name(self) -> Result<Cow<'static, str>>;
+
+    fn name(self) -> Cow<'static, str> {
+        self.try_name().unwrap()
+    }
+}
 
 pub trait BytesAsset {
     fn try_bytes(&self) -> Result<Cow<'static, [u8]>>;
@@ -114,10 +170,12 @@ pub trait StrAsset: BytesAsset {
     }
 }
 
-pub trait Asset<T>: BytesAsset {
-    fn load(bytes: Cow<[u8]>) -> Result<T>;
+pub trait Asset: BytesAsset {
+    type Value;
 
-    fn try_value(&self) -> Result<T> {
+    fn load(bytes: Cow<[u8]>) -> Result<Self::Value>;
+
+    fn try_value(&self) -> Result<Self::Value> {
         let bytes = self.try_bytes()?;
         Self::load(bytes)
     }
@@ -125,35 +183,38 @@ pub trait Asset<T>: BytesAsset {
     fn try_value_modified(
         &self,
         previous_modified: Option<SystemTime>,
-    ) -> Result<Option<(T, SystemTime)>> {
+    ) -> Result<Option<(Self::Value, SystemTime)>> {
         Ok(match self.try_bytes_modified(previous_modified)? {
             Some((bytes, time)) => Some((Self::load(Cow::Owned(bytes))?, time)),
             None => None,
         })
     }
 
-    fn try_load_value(&self) -> Result<T> {
+    fn try_load_value(&self) -> Result<Self::Value> {
         let bytes = self.try_load_bytes()?;
         Self::load(Cow::Owned(bytes))
     }
 
-    fn value(&self) -> T {
+    fn value(&self) -> Self::Value {
         self.try_value().unwrap()
     }
 
-    fn value_modified(&self, previous_modified: Option<SystemTime>) -> Option<(T, SystemTime)> {
+    fn value_modified(
+        &self,
+        previous_modified: Option<SystemTime>,
+    ) -> Option<(Self::Value, SystemTime)> {
         self.try_value_modified(previous_modified).unwrap()
     }
 
-    fn load_value(&self) -> T {
+    fn load_value(&self) -> Self::Value {
         self.try_load_value().unwrap()
     }
 
-    fn value_fallback(&self) -> T {
+    fn value_fallback(&self) -> Self::Value {
         self.try_load_value().unwrap_or_else(|_| self.value())
     }
 
-    fn try_value_fallback(&self) -> Result<T> {
+    fn try_value_fallback(&self) -> Result<Self::Value> {
         self.try_load_value().or_else(|_| self.try_value())
     }
 }
@@ -162,12 +223,12 @@ pub trait Asset<T>: BytesAsset {
 pub trait SerdeAsset: BytesAsset {
     fn deserialize<'b, T: for<'a> serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> Result<T>;
 
-    fn try_value<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
+    fn try_parsed_value<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
         let bytes = self.try_bytes()?;
         Self::deserialize(bytes)
     }
 
-    fn try_value_modified<T: for<'a> serde::Deserialize<'a>>(
+    fn try_parsed_value_modified<T: for<'a> serde::Deserialize<'a>>(
         &self,
         previous_modified: Option<SystemTime>,
     ) -> Result<Option<(T, SystemTime)>> {
@@ -177,96 +238,57 @@ pub trait SerdeAsset: BytesAsset {
         })
     }
 
-    fn try_load_value<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
+    fn try_load_parsed_value<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
         let bytes = self.try_load_bytes()?;
         Self::deserialize(Cow::Owned(bytes))
     }
 
-    fn value<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
-        self.try_value().unwrap()
+    fn parsed_value<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
+        self.try_parsed_value().unwrap()
     }
 
-    fn value_modified<T: for<'a> serde::Deserialize<'a>>(
+    fn parsed_value_modified<T: for<'a> serde::Deserialize<'a>>(
         &self,
         previous_modified: Option<SystemTime>,
     ) -> Option<(T, SystemTime)> {
-        self.try_value_modified(previous_modified).unwrap()
+        self.try_parsed_value_modified(previous_modified).unwrap()
     }
 
-    fn load_value<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
-        self.try_load_value().unwrap()
+    fn load_parsed_value<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
+        self.try_load_parsed_value().unwrap()
     }
 
-    fn value_fallback<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
-        self.try_load_value().unwrap_or_else(|_| self.value())
+    fn parsed_value_fallback<T: for<'a> serde::Deserialize<'a>>(&self) -> T {
+        self.try_load_parsed_value()
+            .unwrap_or_else(|_| self.parsed_value())
     }
 
-    fn try_value_fallback<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
-        self.try_load_value().or_else(|_| self.try_value())
-    }
-}
-
-#[cfg(feature = "image")]
-pub trait ImageAsset: BytesAsset {
-    fn try_image(&self) -> Result<image::RgbaImage> {
-        <Self as Asset<image::RgbaImage>>::try_value(self)
-    }
-
-    fn try_image_modified(
-        &self,
-        previous_modified: Option<SystemTime>,
-    ) -> Result<Option<(image::RgbaImage, SystemTime)>> {
-        <Self as Asset<image::RgbaImage>>::try_value_modified(self, previous_modified)
-    }
-
-    fn try_load_image(&self) -> Result<image::RgbaImage> {
-        <Self as Asset<image::RgbaImage>>::try_load_value(self)
-    }
-
-    fn image(&self) -> image::RgbaImage {
-        <Self as Asset<image::RgbaImage>>::value(self)
-    }
-
-    fn image_modified(
-        &self,
-        previous_modified: Option<SystemTime>,
-    ) -> Option<(image::RgbaImage, SystemTime)> {
-        <Self as Asset<image::RgbaImage>>::value_modified(self, previous_modified)
-    }
-
-    fn load_image(&self) -> image::RgbaImage {
-        <Self as Asset<image::RgbaImage>>::load_value(self)
-    }
-
-    fn image_fallback(&self) -> image::RgbaImage {
-        <Self as Asset<image::RgbaImage>>::value_fallback(self)
-    }
-
-    fn try_image_fallback(&self) -> Result<image::RgbaImage> {
-        <Self as Asset<image::RgbaImage>>::try_value_fallback(self)
+    fn try_parsed_value_fallback<T: for<'a> serde::Deserialize<'a>>(&self) -> Result<T> {
+        self.try_load_parsed_value()
+            .or_else(|_| self.try_parsed_value())
     }
 }
 
-#[cfg(feature = "image")]
-impl<T: ?Sized> Asset<image::RgbaImage> for T
+pub trait CachedAsset: Asset
 where
-    T: ImageAsset,
+    Self: 'static + Clone + Eq + Hash,
 {
-    fn load(bytes: Cow<[u8]>) -> Result<image::RgbaImage> {
-        Ok(image::load_from_memory(&bytes).expect("TODO").to_rgba8())
+    fn cache() -> &'static RwCache<Self, Self::Value>;
+
+    fn cached(&self) -> Arc<Self::Value> {
+        Self::cache().get(self)
     }
-}
 
-#[cfg(feature = "serde_json")]
-pub trait JsonAsset: BytesAsset {}
+    fn cached_modified(&self) -> Arc<Self::Value> {
+        Self::cache().get_updated(self)
+    }
 
-#[cfg(feature = "serde_json")]
-impl<A: ?Sized> SerdeAsset for A
-where
-    A: BytesAsset,
-{
-    fn deserialize<'b, T: for<'a> serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> Result<T> {
-        Ok(serde_json::from_slice(bytes.as_ref()).expect("TODO"))
+    fn cached_reload(&self) -> Arc<Self::Value> {
+        Self::cache().reload(self)
+    }
+
+    fn cached_remove(&self) {
+        Self::cache().remove(self);
     }
 }
 
@@ -301,8 +323,40 @@ impl PathCache {
     }
 }
 
+struct NameCache {
+    names: Vec<String>,
+}
+
+impl NameCache {
+    fn new() -> Self {
+        NameCache {
+            names: Vec::with_capacity(256),
+        }
+    }
+
+    fn insert_name(&mut self, name: &str) -> u32 {
+        let i = self.names.len() as u32;
+        self.names.push(name.to_owned());
+        i
+    }
+
+    fn fetch_name(&self, index: u32) -> Result<&str> {
+        let backing_index = index as usize;
+        if backing_index < self.names.len() {
+            Ok(&self.names[backing_index])
+        } else {
+            Err(AssistError::NoNameCached(index))
+        }
+    }
+
+    fn fetch_name_index(&self, name: &str) -> Option<u32> {
+        self.names.iter().position(|p| p == name).map(|x| x as u32)
+    }
+}
+
 lazy_static::lazy_static! {
     static ref PATH_CACHE: RwLock<PathCache> = RwLock::new(PathCache::new());
+    static ref NAME_CACHE: RwLock<NameCache> = RwLock::new(NameCache::new());
 }
 
 pub mod internal {
@@ -312,20 +366,38 @@ pub mod internal {
 
     pub fn fetch_path_index(path: &Path) -> u32 {
         let existing = {
-            let c = PATH_CACHE.read().expect("RwLock poisoned");
+            let c = PATH_CACHE.read();
             c.fetch_path_index(path)
         };
 
         existing.unwrap_or_else(|| {
-            let mut c = PATH_CACHE.write().expect("RwLock poisoned");
+            let mut c = PATH_CACHE.write();
             c.fetch_path_index(path)
                 .unwrap_or_else(|| c.insert_path(path))
         })
     }
 
+    pub fn fetch_name_index(name: &str) -> u32 {
+        let existing = {
+            let c = NAME_CACHE.read();
+            c.fetch_name_index(name)
+        };
+
+        existing.unwrap_or_else(|| {
+            let mut c = NAME_CACHE.write();
+            c.fetch_name_index(name)
+                .unwrap_or_else(|| c.insert_name(name))
+        })
+    }
+
     pub fn fetch_path(index: u32) -> Result<PathBuf> {
-        let c = PATH_CACHE.read().expect("RwLock poisoned");
+        let c = PATH_CACHE.read();
         c.fetch_path(index).map(Path::to_owned)
+    }
+
+    pub fn fetch_name(index: u32) -> Result<String> {
+        let c = NAME_CACHE.read();
+        c.fetch_name(index).map(str::to_owned)
     }
 
     pub fn fetch_bytes(index: u32) -> Result<Vec<u8>> {

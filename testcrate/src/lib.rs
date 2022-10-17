@@ -1,25 +1,46 @@
-assist::assist!("assets", mod assets);
+#[derive(serde::Deserialize)]
+pub struct ItemData {
+    pub name: String,
+    pub rarity: usize,
+}
+
+#[derive(serde::Deserialize)]
+pub struct Config {
+    pub name: String,
+    pub opt: bool,
+}
+
+assist::assist! {"assets", mod assets
+where
+    "assets/configs": Serde<Config>,
+    "assets/items.yaml": Virtual + Serde<ItemData>,
+    "assets/languages": Transpose,
+}
 
 #[cfg(test)]
 mod pathtests {
     use super::*;
+    use assist::FileAsset;
 
     #[test]
     fn modules_have_correct_paths() {
-        assert_eq!(assets::PATH, "assets");
-        assert_eq!(assets::sprites::PATH, "assets/sprites");
-        assert_eq!(assets::text::notes::PATH, "assets/text/notes");
-        assert_eq!(assets::text::json::PATH, "assets/text/json");
+        assert_eq!(assets::Assets::PARENT, "assets");
+        assert_eq!(assets::sprites::Sprites::PARENT, "assets/sprites");
+        assert_eq!(assets::text::notes::Notes::PARENT, "assets/text/notes");
+        assert_eq!(assets::text::json::Json::PARENT, "assets/text/json");
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::borrow::Cow;
     use std::path::Path;
     use std::time::SystemTime;
 
     use assist::BytesAsset;
+    use assist::FileAsset;
 
     #[allow(unused_imports)]
     use super::assets::{
@@ -42,7 +63,8 @@ mod tests {
         assert_eq!(&notes, Notes::ALL);
         assert_eq!(&json, Json::ALL);
 
-        assert_eq!(assets::Assets::ALL, &[]);
+        // TODO: Once virtual is implemented, this should be fixed
+        //assert_eq!(assets::Assets::ALL, &[]);
         assert_eq!(assets::text::Text::ALL, &[]);
     }
 
@@ -169,5 +191,38 @@ mod tests {
         assert!(Notes::Note1
             .bytes_modified(Some(SystemTime::UNIX_EPOCH))
             .is_some());
+    }
+
+    #[test]
+    fn image_impl() {
+        use assist::Asset;
+
+        let _img: assist::load::RgbaImage = Sprites::Happy.value();
+    }
+
+    #[test]
+    fn json_impl() {
+        use assist::SerdeAsset;
+
+        #[derive(serde::Deserialize)]
+        struct Thing {
+            name: String,
+        }
+
+        let t = Json::FirstJsonFile.parsed_value::<Thing>();
+        assert_eq!(t.name, "one");
+    }
+
+    #[test]
+    fn specific_serde_impl() {
+        use assist::Asset;
+
+        let dev: Config = assets::configs::Configs::Dev.value();
+        let release: Config = assets::configs::Configs::Release.value();
+
+        assert_eq!(dev.name, "dev");
+        assert_eq!(release.name, "release");
+        assert!(!dev.opt);
+        assert!(release.opt);
     }
 }

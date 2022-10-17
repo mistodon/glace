@@ -1,24 +1,37 @@
 # Asset management / staticfs
 
 Actual todos:
-1. [ ] Implement ImageAsset only for images
-2. [ ] Implement JsonAsset only for json files
-3. [ ] Finish implementing RwCache and add self_cached feature
-    - [ ] Make sure cache can fall through to const data
-    - [ ] And do read-if-modified
-4. [ ] Add disable_fs and disable_const_data features
+1. [x] Implement ImageAsset only for images
+2. [x] Implement JsonAsset only for json files
+3. [x] Finish implementing RwCache and add self_cached feature
+    - [x] Make sure cache can fall through to const data
+    - [x] And do read-if-modified
+4. [x] Add disable_fs and disable_const_data features
+    - disable_const_data should remove const fns and change the behavious of fallbacky methods to always load
+    - disable_fs should always and only fall back to const (or directly return Err?)
+    - disable both just un-implements all traits
+5. [x] Ensure load_modified works with fs disabled (fallback)
+6. [x] Ensure cache in general works with fs disabled
+7. [x] Make self_cached fns into a CachedAsset trait
 
 Nice-to-haves:
-- [ ] Faster RwLocks
-- [ ] Other serde crate supports
-- [ ] Optional edres type generation
+- [x] Faster RwLocks
+- [x] Other serde crate supports
 - [ ] Per-path overrides:
+    - [ ] Single (generates just struct instead of enum)
     - [ ] Virtual
     - [ ] Transpose
+        - [ ] Option mode
+        - [ ] Default mode
     - [ ] Explicit supplied deserialized type
+        - `Serde<MyType>`
     - [ ] disable_const / disable_fs / disable_cache overrides
-- [ ] Directory layers (mods etc.)
+        - `WithConst`, `WithIo`, `NoConst`, `NoIo`, `WithCache`, `NoCache`
+- [ ] Generate prelude module that exports all data types
+    - And maybe also export the assist:: traits
+- [ ] Optional edres type generation
 - [ ] Path-to `dyn BytesAsset` that can be downcast
+- [ ] Directory layers (mods etc.)
 - [ ] Optional `notify` thread for reloading self_caches
 
 Notes:
@@ -107,3 +120,56 @@ Some(data)
 ```
 
 Cache thread_local instead of using locks??
+
+# Transpose design
+
+language/
+    en/
+        description.txt
+        credits.txt
+    it/
+        description.txt
+        credits.txt
+
+If we say that `"assets/language": Transpose`, then the simplest implementation would be:
+
+```rust
+mod language {
+    mod description {
+        pub enum Description {
+            En,
+            It,
+        }
+    }
+
+    mod credits {
+        pub enum Credits {
+            En,
+            It,
+        }
+    }
+}
+```
+
+But this deprives us of an umbrella key that we can use to access both description and credits. So consider also adding:
+
+```rust
+    pub enum Language {
+        En,
+        It,
+    }
+
+    impl Language {
+        pub fn description(self) -> Description {
+            ...
+        }
+
+        pub fn credits(self) -> Credits {
+            ...
+        }
+    }
+```
+
+This would necessitate that Transpose directories _only_ contain other directories.
+
+This also raises the question of what happens if a subdirectory is missing a file.
