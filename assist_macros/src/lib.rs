@@ -427,6 +427,7 @@ fn generate_dir_module(
 
     let (sub_modules, prelude_contents): (Vec<_>, Vec<_>) = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
+        .sort_by_file_name(std::ffi::OsStr::cmp)
         .filter_entry(move |entry| {
             entry
                 .file_type()
@@ -462,6 +463,7 @@ fn generate_dir_module(
 
     let files = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
+        .sort_by_file_name(std::ffi::OsStr::cmp)
         .filter_entry(move |entry| {
             let is_file = entry.file_type().map(|f| f.is_file()).unwrap_or(false);
             let skipped = entry

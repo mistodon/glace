@@ -70,7 +70,7 @@ mod tests {
     fn file_variants_are_generated_correctly() {
         let sprites = [Sprites::Happy, Sprites::Sad];
         let notes = [Notes::Note1, Notes::Note2];
-        let json = [Json::FirstJsonFile, Json::SecondJsonFile];
+        let json = [Json::PrimaryJsonFile, Json::SecondJsonFile];
 
         assert_eq!(&sprites, Sprites::ALL);
         assert_eq!(&notes, Notes::ALL);
@@ -87,12 +87,12 @@ mod tests {
         assert_eq!(Notes::Note1.const_path(), "assets/text/notes/note1.txt");
         assert_eq!(Notes::Note2.const_path(), "assets/text/notes/note2.txt");
         assert_eq!(
-            Json::FirstJsonFile.const_path(),
-            "assets/text/json/first_json_file.json"
+            Json::PrimaryJsonFile.const_path(),
+            "assets/text/json/primary_json_file.json"
         );
         assert_eq!(
             Json::SecondJsonFile.const_path(),
-            "assets/text/json/Second JSON file.json"
+            "assets/text/json/second JSON file.json"
         );
     }
 
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(Notes::Note1.const_bytes(), b"Note 1\n");
         assert_eq!(Notes::Note2.const_bytes(), b"Note 2\n");
         assert_eq!(
-            Json::FirstJsonFile.const_bytes(),
+            Json::PrimaryJsonFile.const_bytes(),
             b"{\n    \"name\": \"one\"\n}\n"
         );
     }
@@ -221,7 +221,7 @@ mod tests {
             name: String,
         }
 
-        let t = Json::FirstJsonFile.parsed_value::<Thing>();
+        let t = Json::PrimaryJsonFile.parsed_value::<Thing>();
         assert_eq!(t.name, "one");
     }
 

@@ -424,6 +424,7 @@ pub mod internal {
     {
         ignore::WalkBuilder::new(dir)
             .max_depth(Some(1))
+            .sort_by_file_name(std::ffi::OsStr::cmp)
             .filter_entry(|entry| {
                 let is_file = entry.file_type().map(|f| f.is_file()).unwrap_or(false);
                 let skipped = entry
