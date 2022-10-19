@@ -7,6 +7,9 @@ edition = "2021"
 proc-macro = true
 
 [features]
+edres_json = ["edres", "edres/json"]
+edres_toml = ["edres", "edres/toml"]
+edres_yaml = ["edres", "edres/yaml"]
 image = ["dep:image"]
 self_cached = []
 serde_json = ["dep:serde_json"]
@@ -18,6 +21,7 @@ disable_disk_io = []
 
 [dependencies]
 convert_case = "0.6"
+edres = { version = "0.6", path = "../../edres/edres", optional = true, default-features = false }
 ignore = "0.4"
 image = { version = "0.24", optional = true }
 indexmap = { version = "1.9", features = ["serde"] }

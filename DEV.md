@@ -18,7 +18,7 @@ Nice-to-haves:
 - [x] Faster RwLocks
 - [x] Other serde crate supports
 - [ ] Per-path overrides:
-    - [ ] Single (generates just struct instead of enum)
+    - [x] Single (generates just struct instead of enum)
     - [x] Virtual
     - [ ] Transpose
         - [ ] Option mode
@@ -29,7 +29,7 @@ Nice-to-haves:
         - `WithConst`, `WithIo`, `NoConst`, `NoIo`, `WithCache`, `NoCache`
 - [ ] Generate prelude module that exports all data types
     - And maybe also export the assist:: traits
-- [ ] Optional edres type generation
+- [x] Optional edres type generation
 - [ ] Path-to `dyn BytesAsset` that can be downcast
 - [ ] Directory layers (mods etc.)
 - [ ] Optional `notify` thread for reloading self_caches

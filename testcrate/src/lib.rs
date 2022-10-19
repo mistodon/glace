@@ -1,3 +1,5 @@
+use assist::serde;
+
 #[derive(Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct ItemData {
     pub name: String,
@@ -18,6 +20,9 @@ pub struct Config {
 
 assist::assist! {"assets", mod assets
 where
+    "assets/autoconfig.toml": Single,
+    "assets/autoitems.yaml": Virtual,
+
     "assets/config.toml": Single + Serde<Config>,
     "assets/items.yaml": Virtual + Serde<ItemData>,
     "assets/profiles": Serde<Profile>,
@@ -248,5 +253,56 @@ mod tests {
         assert_eq!(item_2.rarity, 2);
         assert_eq!(item_1, *item_1c);
         assert_eq!(item_2, *item_2c);
+    }
+
+    #[test]
+    fn edres_impl() {
+        use assist::Asset;
+        use assist::CachedAsset;
+
+        let item = assets::autoprofiles::Autoprofiles::Dev;
+        let value: assets::autoprofiles::AutoprofilesValue = item.value();
+        let cached_value = item.cached();
+
+        assert_eq!(value.name, "dev");
+        assert_eq!(value.opt, false);
+        assert_eq!(value, *cached_value);
+    }
+
+    #[test]
+    fn edres_impl_single() {
+        use assist::Asset;
+        use assist::CachedAsset;
+
+        let config = assets::autoconfig::Autoconfig;
+        let value: assets::autoconfig::AutoconfigValue = config.value();
+        let cached_value = config.cached();
+
+        assert_eq!(value.name, "Config");
+        assert_eq!(value.description, "A config file.");
+        assert_eq!(value, *cached_value);
+    }
+
+    #[test]
+    fn edres_impl_virtual() {
+        use assist::Asset;
+        use assist::CachedAsset;
+
+        let item = assets::autoitems::Autoitems::Item1;
+        let value: assets::autoitems::AutoitemsValue = item.value();
+        let cached_value = item.cached();
+
+        assert_eq!(value.name, "Item one");
+        assert_eq!(value.rarity, 1);
+        assert_eq!(value, *cached_value);
+    }
+
+    #[test]
+    fn prelude() {
+        use assets::prelude::*;
+        use assist::Asset;
+
+        assert_eq!(Items::Item1.value().name, "Item one");
+        assert_eq!(Json::SecondJsonFile.value().name, "two");
     }
 }

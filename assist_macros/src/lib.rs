@@ -94,6 +94,10 @@ enum OverrideProperty {
     NoConst,
     WithIo,
     NoIo,
+    WithSerde,
+    NoSerde,
+    WithEdres,
+    NoEdres,
     Transpose(TransposeType),
     Serde(Box<Type>),
 }
@@ -117,6 +121,10 @@ impl Parse for OverrideProperty {
             "NoConst" => OverrideProperty::NoConst,
             "WithIo" => OverrideProperty::WithIo,
             "NoIo" => OverrideProperty::NoIo,
+            "WithSerde" => OverrideProperty::WithSerde,
+            "NoSerde" => OverrideProperty::NoSerde,
+            "WithEdres" => OverrideProperty::WithEdres,
+            "NoEdres" => OverrideProperty::NoEdres,
             "Transpose" => {
                 let mut kind = TransposeType::Required;
                 if input.parse::<Token![<]>().is_ok() {
@@ -148,7 +156,7 @@ fn to_ident(x: &str) -> Ident {
     quote::format_ident!("{}", x)
 }
 
-fn generate_modules(
+fn generate_toplevel_module(
     assist: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
@@ -156,12 +164,46 @@ fn generate_modules(
     path: &Path,
     mod_name: &str,
 ) -> TokenStream2 {
+    let (tokens, _) = generate_modules(assist, overrides, virtuals, singles, path, mod_name, None);
+    tokens
+}
+
+fn generate_modules(
+    assist: &Ident,
+    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
+    virtuals: HashSet<PathBuf>,
+    singles: HashSet<PathBuf>,
+    path: &Path,
+    mod_name: &str,
+    parents: Option<TokenStream2>,
+) -> (TokenStream2, TokenStream2) {
     if singles.contains(path) {
-        generate_single_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
+        generate_single_module(
+            assist,
+            overrides,
+            virtuals,
+            singles,
+            path,
+            mod_name,
+            parents.unwrap(),
+        )
+        .unwrap()
     } else if virtuals.contains(path) {
-        generate_virtual_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
+        generate_virtual_module(
+            assist,
+            overrides,
+            virtuals,
+            singles,
+            path,
+            mod_name,
+            parents.unwrap(),
+        )
+        .unwrap()
     } else {
-        generate_dir_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
+        generate_dir_module(
+            assist, overrides, virtuals, singles, path, mod_name, parents,
+        )
+        .unwrap()
     }
 }
 
@@ -249,7 +291,7 @@ fn serde_asset_impl(
         #[cfg(feature = "serde_json")]
         MainType::Json => Some(quote!(
             impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
                     #assist::load::load_json(bytes)
                 }
             }
@@ -258,7 +300,7 @@ fn serde_asset_impl(
         #[cfg(feature = "serde_toml")]
         MainType::Toml => Some(quote!(
             impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
                     #assist::load::load_toml(bytes)
                 }
             }
@@ -267,7 +309,7 @@ fn serde_asset_impl(
         #[cfg(feature = "serde_yaml")]
         MainType::Yaml => Some(quote!(
             impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
                     #assist::load::load_yaml(bytes)
                 }
             }
@@ -344,6 +386,21 @@ fn cache_and_impl(
     }
 }
 
+fn override_type<'a>(
+    overrides: &'a HashMap<PathBuf, Vec<OverrideProperty>>,
+    path: &Path,
+) -> Option<&'a Type> {
+    overrides.get(path).and_then(|props| {
+        props
+            .iter()
+            .filter_map(|p| match p {
+                OverrideProperty::Serde(ty) => Some(ty.as_ref()),
+                _ => None,
+            })
+            .next()
+    })
+}
+
 fn generate_dir_module(
     assist: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
@@ -351,16 +408,24 @@ fn generate_dir_module(
     singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
-) -> Result<TokenStream2> {
-    let enum_name = to_ident(&mod_name.to_case(Case::Pascal));
+    parents: Option<TokenStream2>,
+) -> Result<(TokenStream2, TokenStream2)> {
+    let enum_str_name = mod_name.to_case(Case::Pascal);
+    let enum_name = to_ident(&enum_str_name);
     let mod_name = to_ident(mod_name);
+
+    let next_parents = match &parents {
+        Some(parents) => quote!(#parents::#mod_name),
+        None => quote!(super),
+    };
+    let return_parents = next_parents.clone();
 
     let virtuals_0 = virtuals.clone();
     let virtuals_1 = virtuals.clone();
     let singles_0 = singles.clone();
     let singles_1 = singles.clone();
 
-    let sub_modules = ignore::WalkBuilder::new(path)
+    let (sub_modules, prelude_contents): (Vec<_>, Vec<_>) = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
         .filter_entry(move |entry| {
             entry
@@ -390,9 +455,10 @@ fn generate_dir_module(
                 singles_1.clone(),
                 &path,
                 &mod_name,
+                Some(next_parents.clone()),
             )
         })
-        .collect::<Vec<_>>();
+        .unzip();
 
     let files = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
@@ -502,17 +568,58 @@ fn generate_dir_module(
     let main_type = MainType::of(&files).asset_type();
     let serde_asset_impl = serde_asset_impl(assist, &enum_name, main_type);
 
-    let specific_type: Option<&Type> = {
-        overrides.get(path).and_then(|props| {
-            props
-                .iter()
-                .filter_map(|p| match p {
-                    OverrideProperty::Serde(ty) => Some(ty.as_ref()),
-                    _ => None,
-                })
-                .next()
-        })
+    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
+        let overridden = override_type(overrides, path);
+        if overridden.is_some() {
+            (overridden.map(Cow::Borrowed), None)
+        } else {
+            let value_str_name = format!("{}Value", enum_str_name);
+            let value_name = to_ident(&value_str_name);
+            let format = match main_type {
+                #[cfg(feature = "edres_json")]
+                MainType::Json => Some(edres::Format::Json),
+
+                #[cfg(feature = "edres_toml")]
+                MainType::Toml => Some(edres::Format::Toml),
+
+                #[cfg(feature = "edres_yaml")]
+                MainType::Yaml => Some(edres::Format::Yaml),
+
+                _ => None,
+            };
+
+            if let Some(format) = format {
+                let tokens = edres::codegen::define_structs_from_file_contents(
+                    path,
+                    &value_str_name,
+                    Some(format),
+                    &edres::Options {
+                        serde_support: edres::SerdeSupport::Yes,
+                        structs: edres::StructOptions {
+                            derived_traits: vec![
+                                "Debug".into(),
+                                "Clone".into(),
+                                "PartialEq".into(),
+                            ]
+                            .into(),
+                            ..edres::StructOptions::minimal()
+                        },
+                        ..edres::Options::minimal()
+                    },
+                )?;
+
+                let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+
+                (Some(specific_type), Some(tokens))
+            } else {
+                (None, None)
+            }
+        }
     };
+    let specific_type: Option<&Type> = specific_type.as_deref();
+    let edres_attrs = edres_tokens
+        .is_some()
+        .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
     let asset_impl = asset_impl(assist, &enum_name, main_type, specific_type);
 
@@ -538,8 +645,19 @@ fn generate_dir_module(
         )
     });
 
-    Ok(quote!(
+    let include_prelude = parents.is_none();
+    let prelude_module = include_prelude.then(|| {
+        quote!(pub mod prelude {
+            #(pub use #prelude_contents;)*
+        })
+    });
+
+    let tokens = quote!(
         pub mod #mod_name {
+            #edres_attrs
+
+            #prelude_module
+
             use super::*;
 
             use std::{
@@ -549,6 +667,8 @@ fn generate_dir_module(
             };
 
             use #assist::{FileAsset, BytesAsset, StrAsset};
+
+            #edres_tokens
 
             #self_cache
 
@@ -629,10 +749,10 @@ fn generate_dir_module(
                 }
             }
 
-            impl #assist::load::Serialize for #enum_name {
+            impl #assist::serde::Serialize for #enum_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
-                    S: #assist::load::Serializer
+                    S: #assist::serde::Serializer
                 {
                     match *self {
                         Self::_Path(_) => {
@@ -648,10 +768,10 @@ fn generate_dir_module(
                 }
             }
 
-            impl<'de> #assist::load::Deserialize<'de> for #enum_name {
+            impl<'de> #assist::serde::Deserialize<'de> for #enum_name {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
-                    D: #assist::load::Deserializer<'de>
+                    D: #assist::serde::Deserializer<'de>
                 {
                     let key: #assist::PathedKey = #assist::PathedKey::deserialize::<D>(deserializer)?;
                     Ok(match key {
@@ -671,7 +791,9 @@ fn generate_dir_module(
 
             #(#sub_modules)*
         }
-    ))
+    );
+
+    Ok((tokens, quote!(#return_parents::#enum_name)))
 }
 
 fn generate_virtual_module(
@@ -681,8 +803,10 @@ fn generate_virtual_module(
     _singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
-) -> Result<TokenStream2> {
-    let enum_name = to_ident(&mod_name.to_case(Case::Pascal));
+    parents: TokenStream2,
+) -> Result<(TokenStream2, TokenStream2)> {
+    let enum_str_name = mod_name.to_case(Case::Pascal);
+    let enum_name = to_ident(&enum_str_name);
     let mod_name = to_ident(mod_name);
     let dir_path = path.to_string_lossy();
 
@@ -847,25 +971,66 @@ fn generate_virtual_module(
         )
     });
 
-    let specific_type: Option<&Type> = {
-        overrides.get(path).and_then(|props| {
-            props
-                .iter()
-                .filter_map(|p| match p {
-                    OverrideProperty::Serde(ty) => Some(ty.as_ref()),
-                    _ => None,
-                })
-                .next()
-        })
+    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
+        let overridden = override_type(overrides, path);
+        if overridden.is_some() {
+            (overridden.map(Cow::Borrowed), None)
+        } else {
+            let source = std::fs::read_to_string(path)?;
+            let value_str_name = format!("{}Value", enum_str_name);
+            let value_name = to_ident(&value_str_name);
+            let value = match main_type {
+                #[cfg(feature = "edres_json")]
+                MainType::Json => {
+                    edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                #[cfg(feature = "edres_toml")]
+                MainType::Toml => {
+                    edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                #[cfg(feature = "edres_yaml")]
+                MainType::Yaml => {
+                    edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                _ => Err(eyre!("Need at least one serde feature enabled"))?,
+            };
+
+            let tokens = edres::codegen::define_structs_from_values(
+                &value.assume_struct()?,
+                &value_str_name,
+                &edres::Options {
+                    serde_support: edres::SerdeSupport::Yes,
+                    structs: edres::StructOptions {
+                        derived_traits: vec!["Debug".into(), "Clone".into(), "PartialEq".into()]
+                            .into(),
+                        ..edres::StructOptions::minimal()
+                    },
+                    ..edres::Options::minimal()
+                },
+            )?;
+
+            let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+
+            (Some(specific_type), Some(tokens))
+        }
     };
+    let specific_type: Option<&Type> = specific_type.as_deref();
+    let edres_attrs = edres_tokens
+        .is_some()
+        .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
     let asset_impl = asset_impl(assist, &enum_name, asset_type, specific_type);
     let serde_asset_impl = serde_asset_impl(assist, &enum_name, asset_type);
 
     let (self_cache, self_cache_impl) = cache_and_impl(assist, &enum_name, asset_impl.is_some());
 
-    Ok(quote!(
+    let tokens = quote!(
         pub mod #mod_name {
+            #edres_attrs
+
             use super::*;
 
             use std::{
@@ -875,6 +1040,8 @@ fn generate_virtual_module(
             };
 
             use #assist::{VirtualAsset, BytesAsset, StrAsset};
+
+            #edres_tokens
 
             #self_cache
 
@@ -934,21 +1101,21 @@ fn generate_virtual_module(
                 }
             }
 
-            impl #assist::load::Serialize for #enum_name {
+            impl #assist::serde::Serialize for #enum_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
-                    S: #assist::load::Serializer
+                    S: #assist::serde::Serializer
                 {
                     self.name().serialize(serializer)
                 }
             }
 
-            impl<'de> #assist::load::Deserialize<'de> for #enum_name {
+            impl<'de> #assist::serde::Deserialize<'de> for #enum_name {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
-                    D: #assist::load::Deserializer<'de>
+                    D: #assist::serde::Deserializer<'de>
                 {
-                    let name: &'de str = <&'de str as #assist::load::Deserialize<'de>>::deserialize::<D>(deserializer)?;
+                    let name: &'de str = <&'de str as #assist::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
                     Ok(Self::from_name(name))
                 }
             }
@@ -961,7 +1128,9 @@ fn generate_virtual_module(
 
             #self_cache_impl
         }
-    ))
+    );
+
+    Ok((tokens, quote!(#parents::#mod_name::#enum_name)))
 }
 
 #[allow(unused_variables)]
@@ -972,11 +1141,12 @@ fn generate_single_module(
     _singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
-) -> Result<TokenStream2> {
+    parents: TokenStream2,
+) -> Result<(TokenStream2, TokenStream2)> {
     let struct_str_name = mod_name.to_case(Case::Pascal);
     let struct_name = to_ident(&struct_str_name);
     let mod_name = to_ident(mod_name);
-    let dir_path = path.to_string_lossy();
+    let file_path = path.to_string_lossy();
 
     let main_type = MainType::of(&[path]);
     let asset_type = main_type.asset_type();
@@ -984,7 +1154,7 @@ fn generate_single_module(
     let const_data: Option<TokenStream2> = cfg!(not(feature = "disable_const_data")).then(|| {
         quote!(
             const BYTES: &'static [u8] =
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #dir_path));
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #file_path));
 
             pub const fn const_bytes(self) -> &'static [u8] {
                 Self::BYTES
@@ -1054,24 +1224,66 @@ fn generate_single_module(
         )
     });
 
-    let specific_type: Option<&Type> = {
-        overrides.get(path).and_then(|props| {
-            props
-                .iter()
-                .filter_map(|p| match p {
-                    OverrideProperty::Serde(ty) => Some(ty.as_ref()),
-                    _ => None,
-                })
-                .next()
-        })
+    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
+        let overridden = override_type(overrides, path);
+        if overridden.is_some() {
+            (overridden.map(Cow::Borrowed), None)
+        } else {
+            let source = std::fs::read_to_string(path)?;
+            let value_str_name = format!("{}Value", struct_str_name);
+            let value_name = to_ident(&value_str_name);
+            let value = match main_type {
+                #[cfg(feature = "edres_json")]
+                MainType::Json => {
+                    edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                #[cfg(feature = "edres_toml")]
+                MainType::Toml => {
+                    edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                #[cfg(feature = "edres_yaml")]
+                MainType::Yaml => {
+                    edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
+                }
+
+                _ => Err(eyre!("Need at least one serde feature enabled"))?,
+            };
+
+            let tokens = edres::codegen::define_structs(
+                &value.assume_struct()?,
+                &value_str_name,
+                Some(path),
+                &edres::Options {
+                    serde_support: edres::SerdeSupport::Yes,
+                    structs: edres::StructOptions {
+                        derived_traits: vec!["Debug".into(), "Clone".into(), "PartialEq".into()]
+                            .into(),
+                        ..edres::StructOptions::minimal()
+                    },
+                    ..edres::Options::minimal()
+                },
+            )?;
+
+            let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+
+            (Some(specific_type), Some(tokens))
+        }
     };
+    let specific_type: Option<&Type> = specific_type.as_deref();
+    let edres_attrs = edres_tokens
+        .is_some()
+        .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
     let serde_asset_impl = serde_asset_impl(assist, &struct_name, asset_type);
     let asset_impl = asset_impl(assist, &struct_name, asset_type, specific_type);
     let (self_cache, self_cache_impl) = cache_and_impl(assist, &struct_name, asset_impl.is_some());
 
-    Ok(quote!(
+    let tokens = quote!(
         pub mod #mod_name {
+            #edres_attrs
+
             use super::*;
 
             use std::{
@@ -1081,6 +1293,8 @@ fn generate_single_module(
             };
 
             use #assist::{SingleAsset, BytesAsset, StrAsset};
+
+            #edres_tokens
 
             #self_cache
 
@@ -1098,24 +1312,24 @@ fn generate_single_module(
 
             impl SingleAsset for #struct_name {
                 const NAME: &'static str = #struct_str_name;
-                const PATH: &'static str = #dir_path;
+                const PATH: &'static str = #file_path;
             }
 
-            impl #assist::load::Serialize for #struct_name {
+            impl #assist::serde::Serialize for #struct_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
-                    S: #assist::load::Serializer
+                    S: #assist::serde::Serializer
                 {
                     (()).serialize(serializer)
                 }
             }
 
-            impl<'de> #assist::load::Deserialize<'de> for #struct_name {
+            impl<'de> #assist::serde::Deserialize<'de> for #struct_name {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
-                    D: #assist::load::Deserializer<'de>
+                    D: #assist::serde::Deserializer<'de>
                 {
-                    let _: () = <() as #assist::load::Deserialize<'de>>::deserialize::<D>(deserializer)?;
+                    let _: () = <() as #assist::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
                     Ok(#struct_name)
                 }
             }
@@ -1128,7 +1342,9 @@ fn generate_single_module(
 
             #self_cache_impl
         }
-    ))
+    );
+
+    Ok((tokens, quote!(#parents::#mod_name::#struct_name)))
 }
 
 #[proc_macro]
@@ -1195,7 +1411,7 @@ pub fn assist(stream: TokenStream) -> TokenStream {
         .map(|entry| entry.0.clone())
         .collect::<HashSet<_>>();
 
-    generate_modules(
+    generate_toplevel_module(
         &call.alias,
         &call.overrides,
         virtuals,

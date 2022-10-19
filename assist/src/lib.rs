@@ -5,6 +5,9 @@ pub use assist_macros::assist;
 pub use indexmap::IndexMap;
 pub use lazy_static::lazy_static;
 
+#[cfg(feature = "serde")]
+pub use serde;
+
 use std::borrow::Cow;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};

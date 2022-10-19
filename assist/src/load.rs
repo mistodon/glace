@@ -8,7 +8,7 @@ use crate::Result;
 pub use image::RgbaImage;
 
 #[cfg(feature = "serde")]
-pub use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::Deserialize;
 
 #[cfg(feature = "image")]
 pub fn load_image(bytes: Cow<[u8]>) -> Result<RgbaImage> {

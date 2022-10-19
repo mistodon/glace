@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["self_cached", "image", "serde_json", "serde_toml", "serde_yaml"]
+default = ["edres_json", "edres_toml", "edres_yaml", "self_cached", "image"]
 
+edres_json = ["serde_json", "assist_macros/edres_json"]
+edres_toml = ["serde_toml", "assist_macros/edres_toml"]
+edres_yaml = ["serde_yaml", "assist_macros/edres_yaml"]
 image = ["dep:image", "assist_macros/image"]
 
 serde = ["dep:serde"]
