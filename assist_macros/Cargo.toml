@@ -21,7 +21,7 @@ disable_disk_io = []
 
 [dependencies]
 convert_case = "0.6"
-edres = { version = "0.6", path = "../../edres/edres", optional = true, default-features = false }
+edres = { version = "0.6", git = "https://github.com/mistodon/edres", optional = true, default-features = false, branch = "v0.6.0" }
 ignore = "0.4"
 image = { version = "0.24", optional = true }
 indexmap = { version = "1.9", features = ["serde"] }
