@@ -117,7 +117,7 @@ mod tests {
             Notes::Note1
         );
         assert_eq!(
-            Notes::from_path("assets/text/notes/_secret_note.txt".as_ref()),
+            Notes::from_path("assets/text/notes/_a_secret_note.txt".as_ref()),
             Notes::_Path(0)
         );
         assert_eq!(
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn path_works_correctly() {
-        let secret_path: &Path = "assets/text/notes/_secret_note.txt".as_ref();
+        let secret_path: &Path = "assets/text/notes/_a_secret_note.txt".as_ref();
         let another_secret_path: &Path = "assets/text/notes/_another_secret_note.txt".as_ref();
 
         let secret_note = Notes::from_path(secret_path);
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn bytes_works_correctly() {
-        let secret_path: &Path = "assets/text/notes/_secret_note.txt".as_ref();
+        let secret_path: &Path = "assets/text/notes/_a_secret_note.txt".as_ref();
         let secret_note = Notes::from_path(secret_path);
 
         assert_eq!(Notes::Note1.bytes(), Cow::Borrowed(b"Note 1\n"));
@@ -178,7 +178,7 @@ mod tests {
         let mut expected: Vec<Cow<'static, Path>> = vec![
             Cow::Borrowed("assets/text/notes/note1.txt".as_ref()),
             Cow::Borrowed("assets/text/notes/note2.txt".as_ref()),
-            Cow::Owned("assets/text/notes/_secret_note.txt".into()),
+            Cow::Owned("assets/text/notes/_a_secret_note.txt".into()),
             Cow::Owned("assets/text/notes/_another_secret_note.txt".into()),
         ];
 
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn load_modified_works() {
-        let secret_path: &Path = "assets/text/notes/_secret_note.txt".as_ref();
+        let secret_path: &Path = "assets/text/notes/_a_secret_note.txt".as_ref();
         let secret_note = Notes::from_path(secret_path);
 
         let (_, time1) = Notes::Note1.bytes_modified(None).unwrap();
