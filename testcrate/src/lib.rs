@@ -70,7 +70,7 @@ mod tests {
     fn file_variants_are_generated_correctly() {
         let sprites = [Sprites::Happy, Sprites::Sad];
         let notes = [Notes::Note1, Notes::Note2];
-        let json = [Json::PrimaryJsonFile, Json::SecondJsonFile];
+        let json = [Json::PrimaryJsonFile, Json::SecondaryJsonFile];
 
         assert_eq!(&sprites, Sprites::ALL);
         assert_eq!(&notes, Notes::ALL);
@@ -91,8 +91,8 @@ mod tests {
             "assets/text/json/primary_json_file.json"
         );
         assert_eq!(
-            Json::SecondJsonFile.const_path(),
-            "assets/text/json/second JSON file.json"
+            Json::SecondaryJsonFile.const_path(),
+            "assets/text/json/secondary JSON File.json"
         );
     }
 
@@ -303,6 +303,6 @@ mod tests {
         use assist::Asset;
 
         assert_eq!(Items::Item1.value().name, "Item one");
-        assert_eq!(Json::SecondJsonFile.value().name, "two");
+        assert_eq!(Json::SecondaryJsonFile.value().name, "two");
     }
 }
