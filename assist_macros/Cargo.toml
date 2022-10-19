@@ -1,5 +1,5 @@
 [package]
-name = "assist_proc_macro"
+name = "assist_macros"
 version = "0.1.0"
 edition = "2021"
 
@@ -26,6 +26,6 @@ quote = "1.0"
 syn = { version = "1.0", features = ["full"] }
 serde_json = { version = "1.0", features = ["preserve_order", "raw_value"], optional = true }
 serde_yaml = { version = "0.9", optional = true }
-toml = { version = "0.5", optional = true }
+toml = { version = "0.5", optional = true, features = ["preserve_order"] }
 color-eyre = "0.6"
 

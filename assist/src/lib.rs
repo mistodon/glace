@@ -1,7 +1,7 @@
 pub mod cache;
 pub mod load;
 
-pub use assist_proc_macro::assist;
+pub use assist_macros::assist;
 pub use indexmap::IndexMap;
 pub use lazy_static::lazy_static;
 
@@ -83,6 +83,11 @@ pub trait VirtualAsset: Sized {
     fn name(self) -> Cow<'static, str> {
         self.try_name().unwrap()
     }
+}
+
+pub trait SingleAsset: Sized {
+    const NAME: &'static str;
+    const PATH: &'static str;
 }
 
 pub trait BytesAsset {

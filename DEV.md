@@ -19,11 +19,11 @@ Nice-to-haves:
 - [x] Other serde crate supports
 - [ ] Per-path overrides:
     - [ ] Single (generates just struct instead of enum)
-    - [ ] Virtual
+    - [x] Virtual
     - [ ] Transpose
         - [ ] Option mode
         - [ ] Default mode
-    - [ ] Explicit supplied deserialized type
+    - [x] Explicit supplied deserialized type
         - `Serde<MyType>`
     - [ ] disable_const / disable_fs / disable_cache overrides
         - `WithConst`, `WithIo`, `NoConst`, `NoIo`, `WithCache`, `NoCache`

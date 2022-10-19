@@ -1,19 +1,26 @@
-#[derive(serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct ItemData {
     pub name: String,
     pub rarity: usize,
 }
 
 #[derive(serde::Deserialize)]
-pub struct Config {
+pub struct Profile {
     pub name: String,
     pub opt: bool,
 }
 
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
+pub struct Config {
+    pub name: String,
+    pub description: String,
+}
+
 assist::assist! {"assets", mod assets
 where
-    "assets/configs": Serde<Config>,
+    "assets/config.toml": Single + Serde<Config>,
     "assets/items.yaml": Virtual + Serde<ItemData>,
+    "assets/profiles": Serde<Profile>,
     "assets/languages": Transpose,
 }
 
@@ -45,6 +52,7 @@ mod tests {
     #[allow(unused_imports)]
     use super::assets::{
         self,
+        items::Items,
         sprites::{self, Sprites},
         text::{
             self,
@@ -63,8 +71,7 @@ mod tests {
         assert_eq!(&notes, Notes::ALL);
         assert_eq!(&json, Json::ALL);
 
-        // TODO: Once virtual is implemented, this should be fixed
-        //assert_eq!(assets::Assets::ALL, &[]);
+        assert_eq!(assets::Assets::ALL, &[]);
         assert_eq!(assets::text::Text::ALL, &[]);
     }
 
@@ -217,12 +224,29 @@ mod tests {
     fn specific_serde_impl() {
         use assist::Asset;
 
-        let dev: Config = assets::configs::Configs::Dev.value();
-        let release: Config = assets::configs::Configs::Release.value();
+        let dev: Profile = assets::profiles::Profiles::Dev.value();
+        let release: Profile = assets::profiles::Profiles::Release.value();
 
         assert_eq!(dev.name, "dev");
         assert_eq!(release.name, "release");
         assert!(!dev.opt);
         assert!(release.opt);
+    }
+
+    #[test]
+    fn virtual_impl() {
+        use assist::Asset;
+        use assist::CachedAsset;
+
+        let item_1 = assets::items::Items::Item1.value();
+        let item_2 = assets::items::Items::Item2.value();
+        let item_1c = assets::items::Items::Item1.cached();
+        let item_2c = assets::items::Items::Item2.cached();
+        assert_eq!(item_1.name, "Item one");
+        assert_eq!(item_2.name, "Item two");
+        assert_eq!(item_1.rarity, 1);
+        assert_eq!(item_2.rarity, 2);
+        assert_eq!(item_1, *item_1c);
+        assert_eq!(item_2, *item_2c);
     }
 }

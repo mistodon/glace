@@ -152,16 +152,20 @@ fn generate_modules(
     assist: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
+    singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
 ) -> TokenStream2 {
-    if virtuals.contains(path) {
-        generate_virtual_module(assist, overrides, virtuals, path, mod_name).unwrap()
+    if singles.contains(path) {
+        generate_single_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
+    } else if virtuals.contains(path) {
+        generate_virtual_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
     } else {
-        generate_dir_module(assist, overrides, virtuals, path, mod_name).unwrap()
+        generate_dir_module(assist, overrides, virtuals, singles, path, mod_name).unwrap()
     }
 }
 
+#[derive(Clone, Copy)]
 enum MainType {
     None,
 
@@ -225,26 +229,147 @@ impl MainType {
         }
         MainType::None
     }
+
+    pub fn asset_type(self) -> MainType {
+        #[cfg(all(feature = "disable_const_data", feature = "disable_disk_io"))]
+        {
+            return MainType::None;
+        }
+        self
+    }
+}
+
+#[allow(unused_variables)]
+fn serde_asset_impl(
+    assist: &Ident,
+    item_name: &Ident,
+    main_type: MainType,
+) -> Option<TokenStream2> {
+    match main_type {
+        #[cfg(feature = "serde_json")]
+        MainType::Json => Some(quote!(
+            impl #assist::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                    #assist::load::load_json(bytes)
+                }
+            }
+        )),
+
+        #[cfg(feature = "serde_toml")]
+        MainType::Toml => Some(quote!(
+            impl #assist::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                    #assist::load::load_toml(bytes)
+                }
+            }
+        )),
+
+        #[cfg(feature = "serde_yaml")]
+        MainType::Yaml => Some(quote!(
+            impl #assist::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
+                    #assist::load::load_yaml(bytes)
+                }
+            }
+        )),
+
+        _ => None,
+    }
+}
+
+fn asset_impl(
+    assist: &Ident,
+    item_name: &Ident,
+    main_type: MainType,
+    value_type: Option<&Type>,
+) -> Option<TokenStream2> {
+    let _serde_impl = value_type.map(|ty| {
+        quote!(
+            impl #assist::Asset for #item_name {
+                type Value = #ty;
+
+                fn load(bytes: Cow<[u8]>) -> #assist::Result<Self::Value> {
+                    <Self as #assist::SerdeAsset>::deserialize(bytes)
+                }
+            }
+        )
+    });
+
+    match main_type {
+        #[cfg(feature = "image")]
+        MainType::Image => Some(quote!(
+            impl #assist::Asset for #item_name {
+                type Value = #assist::load::RgbaImage;
+
+                fn load(bytes: Cow<[u8]>) -> #assist::Result<Self::Value> {
+                    #assist::load::load_image(bytes)
+                }
+            }
+        )),
+
+        #[cfg(feature = "serde_json")]
+        MainType::Json => _serde_impl,
+
+        #[cfg(feature = "serde_toml")]
+        MainType::Toml => _serde_impl,
+
+        #[cfg(feature = "serde_yaml")]
+        MainType::Yaml => _serde_impl,
+
+        MainType::None => None,
+    }
+}
+
+fn cache_and_impl(
+    assist: &Ident,
+    item_name: &Ident,
+    is_asset: bool,
+) -> (Option<TokenStream2>, Option<TokenStream2>) {
+    if cfg!(feature = "self_cached") && is_asset {
+        let self_cache = quote!(
+            #assist::lazy_static! {
+                pub static ref CACHE: #assist::cache::RwCache<#item_name, <#item_name as #assist::Asset>::Value> = #assist::cache::RwCache::new();
+            }
+        );
+        let cached_impl = quote!(
+            impl #assist::CachedAsset for #item_name {
+                fn cache() -> &'static #assist::cache::RwCache<Self, Self::Value> {
+                    &CACHE
+                }
+            }
+        );
+        (Some(self_cache), Some(cached_impl))
+    } else {
+        (None, None)
+    }
 }
 
 fn generate_dir_module(
     assist: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
+    singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
 ) -> Result<TokenStream2> {
     let enum_name = to_ident(&mod_name.to_case(Case::Pascal));
     let mod_name = to_ident(mod_name);
 
-    let virtuals_clone = virtuals.clone();
+    let virtuals_0 = virtuals.clone();
+    let virtuals_1 = virtuals.clone();
+    let singles_0 = singles.clone();
+    let singles_1 = singles.clone();
 
     let sub_modules = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
         .filter_entry(move |entry| {
             entry
                 .file_type()
-                .map(|f| f.is_dir() || virtuals_clone.contains(entry.path()))
+                .map(|f| {
+                    f.is_dir()
+                        || virtuals_0.contains(entry.path())
+                        || singles_0.contains(entry.path())
+                })
                 .unwrap_or(false)
         })
         .build()
@@ -258,13 +383,20 @@ fn generate_dir_module(
                 .to_str()
                 .unwrap()
                 .to_case(Case::Snake);
-            generate_modules(assist, overrides, virtuals.clone(), &path, &mod_name)
+            generate_modules(
+                assist,
+                overrides,
+                virtuals_1.clone(),
+                singles_1.clone(),
+                &path,
+                &mod_name,
+            )
         })
         .collect::<Vec<_>>();
 
     let files = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
-        .filter_entry(|entry| {
+        .filter_entry(move |entry| {
             let is_file = entry.file_type().map(|f| f.is_file()).unwrap_or(false);
             let skipped = entry
                 .path()
@@ -272,7 +404,10 @@ fn generate_dir_module(
                 .and_then(|s| s.to_str())
                 .map(|s| s.starts_with('_'))
                 .unwrap_or(false);
-            is_file && !skipped
+            is_file
+                && !skipped
+                && !virtuals.contains(entry.path())
+                && !singles.contains(entry.path())
         })
         .build()
         .skip(1)
@@ -305,9 +440,7 @@ fn generate_dir_module(
     let has_disk = cfg!(not(feature = "disable_disk_io"));
     let has_const = cfg!(not(feature = "disable_const_data"));
 
-    let base_asset_impls = if !(has_const || has_disk) {
-        None
-    } else {
+    let base_asset_impls = (has_const || has_disk).then(|| {
         let [known_try_bytes, known_try_string] = match has_const {
             true => [
                 quote!(Cow::Borrowed(c.const_bytes())),
@@ -337,7 +470,7 @@ fn generate_dir_module(
                 ],
             };
 
-        Some(quote!(
+        quote!(
             impl BytesAsset for #enum_name {
                 fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
                     Ok(match *self {
@@ -363,37 +496,11 @@ fn generate_dir_module(
                     })
                 }
             }
-        ))
-    };
+        )
+    });
 
-    let main_type = MainType::of(&files);
-    let serde_asset_impl: Option<TokenStream2> = match main_type {
-        #[cfg(feature = "serde_json")]
-        MainType::Json => Some(quote!(
-            impl #assist::SerdeAsset for #enum_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_json(bytes)
-                }
-            }
-        )),
-        #[cfg(feature = "serde_toml")]
-        MainType::Toml => Some(quote!(
-            impl #assist::SerdeAsset for #enum_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_toml(bytes)
-                }
-            }
-        )),
-        #[cfg(feature = "serde_yaml")]
-        MainType::Yaml => Some(quote!(
-            impl #assist::SerdeAsset for #enum_name {
-                fn deserialize<'b, T: for<'a> #assist::load::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_yaml(bytes)
-                }
-            }
-        )),
-        _ => None,
-    };
+    let main_type = MainType::of(&files).asset_type();
+    let serde_asset_impl = serde_asset_impl(assist, &enum_name, main_type);
 
     let specific_type: Option<&Type> = {
         overrides.get(path).and_then(|props| {
@@ -407,66 +514,11 @@ fn generate_dir_module(
         })
     };
 
-    let _serde_impl = specific_type.map(|ty| {
-        quote!(
-            impl #assist::Asset for #enum_name {
-                type Value = #ty;
+    let asset_impl = asset_impl(assist, &enum_name, main_type, specific_type);
 
-                fn load(bytes: std::borrow::Cow<[u8]>) -> #assist::Result<Self::Value> {
-                    <Self as #assist::SerdeAsset>::deserialize(bytes)
-                }
-            }
-        )
-    });
-    let asset_impl: Option<TokenStream2> = match main_type {
-        #[cfg(feature = "image")]
-        MainType::Image => Some(quote!(
-            impl #assist::Asset for #enum_name {
-                type Value = #assist::load::RgbaImage;
+    let (self_cache, self_cache_impl) = cache_and_impl(assist, &enum_name, asset_impl.is_some());
 
-                fn load(bytes: std::borrow::Cow<[u8]>) -> #assist::Result<Self::Value> {
-                    #assist::load::load_image(bytes)
-                }
-            }
-        )),
-
-        #[cfg(feature = "serde_json")]
-        MainType::Json => _serde_impl,
-
-        #[cfg(feature = "serde_toml")]
-        MainType::Toml => _serde_impl,
-
-        #[cfg(feature = "serde_yaml")]
-        MainType::Yaml => _serde_impl,
-
-        MainType::None => None,
-    };
-
-    let self_cache: Option<TokenStream2> = if cfg!(feature = "self_cached") {
-        match main_type {
-            #[cfg(feature = "image")]
-            MainType::Image => Some(quote!(
-                #assist::lazy_static! {
-                    pub static ref CACHE: #assist::cache::RwCache<#enum_name, <#enum_name as #assist::Asset>::Value> = #assist::cache::RwCache::new();
-                }
-            )),
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    let self_cache_impl = self_cache.is_some().then(|| {
-        quote!(
-            impl #assist::CachedAsset for #enum_name {
-                fn cache() -> &'static #assist::cache::RwCache<Self, Self::Value> {
-                    &CACHE
-                }
-            }
-        )
-    });
-
-    let const_data = cfg!(not(feature = "disable_const_data")).then(|| {
+    let const_data: Option<TokenStream2> = cfg!(not(feature = "disable_const_data")).then(|| {
         quote!(
             const BYTES: &'static [&'static [u8]] = &[
                 #(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #variant_paths)),)*
@@ -624,8 +676,9 @@ fn generate_dir_module(
 
 fn generate_virtual_module(
     assist: &Ident,
-    _overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
+    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     _virtuals: HashSet<PathBuf>,
+    _singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
 ) -> Result<TokenStream2> {
@@ -634,6 +687,7 @@ fn generate_virtual_module(
     let dir_path = path.to_string_lossy();
 
     let main_type = MainType::of(&[path]);
+    let asset_type = main_type.asset_type();
     let _source = std::fs::read_to_string(path).unwrap();
     let data: IndexMap<String, Cow<[u8]>> = match main_type {
         #[cfg(feature = "serde_json")]
@@ -669,7 +723,7 @@ fn generate_virtual_module(
 
     let value_bytes = data.values().map(|bs| Literal::byte_string(bs));
 
-    let const_data = cfg!(not(feature = "disable_const_data")).then(|| {
+    let const_data: Option<TokenStream2> = cfg!(not(feature = "disable_const_data")).then(|| {
         quote!(
                 const BYTES: &'static [&'static [u8]] = &[
                     #(#value_bytes,)*
@@ -716,9 +770,7 @@ fn generate_virtual_module(
     let has_disk = cfg!(not(feature = "disable_disk_io"));
     let has_const = cfg!(not(feature = "disable_const_data"));
 
-    let base_asset_impls = if !(has_const || has_disk) {
-        None
-    } else {
+    let base_asset_impls = (has_const || has_disk).then(|| {
         let [known_try_bytes, known_try_string] = match has_const {
             true => [
                 quote!(Cow::Borrowed(c.const_bytes())),
@@ -766,7 +818,7 @@ fn generate_virtual_module(
                 ],
             };
 
-        Some(quote!(
+        quote!(
             impl BytesAsset for #enum_name {
                 fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
                     Ok(match *self {
@@ -792,8 +844,25 @@ fn generate_virtual_module(
                     })
                 }
             }
-        ))
+        )
+    });
+
+    let specific_type: Option<&Type> = {
+        overrides.get(path).and_then(|props| {
+            props
+                .iter()
+                .filter_map(|p| match p {
+                    OverrideProperty::Serde(ty) => Some(ty.as_ref()),
+                    _ => None,
+                })
+                .next()
+        })
     };
+
+    let asset_impl = asset_impl(assist, &enum_name, asset_type, specific_type);
+    let serde_asset_impl = serde_asset_impl(assist, &enum_name, asset_type);
+
+    let (self_cache, self_cache_impl) = cache_and_impl(assist, &enum_name, asset_impl.is_some());
 
     Ok(quote!(
         pub mod #mod_name {
@@ -806,6 +875,8 @@ fn generate_virtual_module(
             };
 
             use #assist::{VirtualAsset, BytesAsset, StrAsset};
+
+            #self_cache
 
             #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
             #[repr(u32)]
@@ -884,14 +955,189 @@ fn generate_virtual_module(
 
             #base_asset_impls
 
-            // TODO: SerdeAsset impl
-            // TODO: Asset impl if specific type given
+            #serde_asset_impl
+
+            #asset_impl
+
+            #self_cache_impl
+        }
+    ))
+}
+
+#[allow(unused_variables)]
+fn generate_single_module(
+    assist: &Ident,
+    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
+    _virtuals: HashSet<PathBuf>,
+    _singles: HashSet<PathBuf>,
+    path: &Path,
+    mod_name: &str,
+) -> Result<TokenStream2> {
+    let struct_str_name = mod_name.to_case(Case::Pascal);
+    let struct_name = to_ident(&struct_str_name);
+    let mod_name = to_ident(mod_name);
+    let dir_path = path.to_string_lossy();
+
+    let main_type = MainType::of(&[path]);
+    let asset_type = main_type.asset_type();
+
+    let const_data: Option<TokenStream2> = cfg!(not(feature = "disable_const_data")).then(|| {
+        quote!(
+            const BYTES: &'static [u8] =
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #dir_path));
+
+            pub const fn const_bytes(self) -> &'static [u8] {
+                Self::BYTES
+            }
+
+            pub const fn const_str(self) -> &'static str {
+                unsafe { std::str::from_utf8_unchecked(self.const_bytes()) }
+            }
+
+            pub const fn try_const_str(self) -> Result<&'static str, std::str::Utf8Error> {
+                unsafe { std::str::from_utf8(self.const_bytes()) }
+            }
+        )
+    });
+
+    let has_disk = cfg!(not(feature = "disable_disk_io"));
+    let has_const = cfg!(not(feature = "disable_const_data"));
+
+    let base_asset_impls = (has_const || has_disk).then(|| {
+        let [known_try_bytes, known_try_string] = match has_const {
+            true => [
+                quote!(Cow::Borrowed(self.const_bytes())),
+                quote!(Cow::Borrowed(self.try_const_str()?)),
+            ],
+            false => [
+                quote!(Cow::Owned(self.load_bytes())),
+                quote!(Cow::Owned(self.try_load_string()?)),
+            ],
+        };
+        let [try_bytes_modified, try_load_bytes] =
+            match has_disk {
+                true => [
+                    quote!(#assist::internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)),
+                    quote!(
+                        Ok(std::fs::read(Self::PATH)?)
+                    ),
+                ],
+                false => [
+                    quote!(Ok(match previous_modified {
+                        None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
+                        _ => None,
+                    })),
+                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                ],
+            };
+
+        quote!(
+            impl BytesAsset for #struct_name {
+                fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
+                    Ok(#known_try_bytes)
+                }
+
+                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #assist::Result<Option<(Vec<u8>, SystemTime)>> {
+                    #try_bytes_modified
+                }
+
+                fn try_load_bytes(&self) -> #assist::Result<Vec<u8>> {
+                    #try_load_bytes
+                }
+            }
+
+            impl StrAsset for #struct_name {
+                fn try_string(&self) -> #assist::Result<Cow<'static, str>> {
+                    Ok(#known_try_string)
+                }
+            }
+        )
+    });
+
+    let specific_type: Option<&Type> = {
+        overrides.get(path).and_then(|props| {
+            props
+                .iter()
+                .filter_map(|p| match p {
+                    OverrideProperty::Serde(ty) => Some(ty.as_ref()),
+                    _ => None,
+                })
+                .next()
+        })
+    };
+
+    let serde_asset_impl = serde_asset_impl(assist, &struct_name, asset_type);
+    let asset_impl = asset_impl(assist, &struct_name, asset_type, specific_type);
+    let (self_cache, self_cache_impl) = cache_and_impl(assist, &struct_name, asset_impl.is_some());
+
+    Ok(quote!(
+        pub mod #mod_name {
+            use super::*;
+
+            use std::{
+                borrow::Cow,
+                path::Path,
+                time::SystemTime,
+            };
+
+            use #assist::{SingleAsset, BytesAsset, StrAsset};
+
+            #self_cache
+
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub struct #struct_name;
+
+            impl #struct_name {
+                #const_data
+
+                // TODO(disk_io)
+                // pub fn all_variants() -> impl Iterator<Item=Self> {
+                //     todo!("read keys from actual file")
+                // }
+            }
+
+            impl SingleAsset for #struct_name {
+                const NAME: &'static str = #struct_str_name;
+                const PATH: &'static str = #dir_path;
+            }
+
+            impl #assist::load::Serialize for #struct_name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: #assist::load::Serializer
+                {
+                    (()).serialize(serializer)
+                }
+            }
+
+            impl<'de> #assist::load::Deserialize<'de> for #struct_name {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: #assist::load::Deserializer<'de>
+                {
+                    let _: () = <() as #assist::load::Deserialize<'de>>::deserialize::<D>(deserializer)?;
+                    Ok(#struct_name)
+                }
+            }
+
+            #base_asset_impls
+
+            #serde_asset_impl
+
+            #asset_impl
+
+            #self_cache_impl
         }
     ))
 }
 
 #[proc_macro]
 pub fn assist(stream: TokenStream) -> TokenStream {
+    let crate_dir = std::env::var_os("CARGO_MANIFEST_DIR");
+    if let Some(path) = crate_dir {
+        std::env::set_current_dir(path).unwrap();
+    }
+
     use std::mem::{size_of, transmute};
 
     {
@@ -924,6 +1170,7 @@ pub fn assist(stream: TokenStream) -> TokenStream {
     }
 
     let call: AssistMacro = parse_macro_input!(stream as AssistMacro);
+
     let virtuals = call
         .overrides
         .iter()
@@ -935,10 +1182,24 @@ pub fn assist(stream: TokenStream) -> TokenStream {
         })
         .map(|entry| entry.0.clone())
         .collect::<HashSet<_>>();
+
+    let singles = call
+        .overrides
+        .iter()
+        .filter(|entry| {
+            entry
+                .1
+                .iter()
+                .any(|prop| matches!(prop, OverrideProperty::Single))
+        })
+        .map(|entry| entry.0.clone())
+        .collect::<HashSet<_>>();
+
     generate_modules(
         &call.alias,
         &call.overrides,
         virtuals,
+        singles,
         &call.path,
         &call.mod_name,
     )
