@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "assist",
-    "assist_macros",
+    "glace",
+    "glace_macros",
     "testcrate",
 ]

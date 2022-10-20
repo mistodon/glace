@@ -1,4 +1,4 @@
-use assist::serde;
+use glace::serde;
 
 #[derive(Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct ItemData {
@@ -18,7 +18,7 @@ pub struct Config {
     pub description: String,
 }
 
-assist::assist! {"assets", mod assets
+glace::glace! {"assets", mod assets
 where
     "assets/autoconfig.toml": Single,
     "assets/autoitems.yaml": Virtual,
@@ -32,7 +32,7 @@ where
 #[cfg(test)]
 mod pathtests {
     use super::*;
-    use assist::FileAsset;
+    use glace::FileAsset;
 
     #[test]
     fn modules_have_correct_paths() {
@@ -51,8 +51,8 @@ mod tests {
     use std::path::Path;
     use std::time::SystemTime;
 
-    use assist::BytesAsset;
-    use assist::FileAsset;
+    use glace::BytesAsset;
+    use glace::FileAsset;
 
     #[allow(unused_imports)]
     use super::assets::{
@@ -207,14 +207,14 @@ mod tests {
 
     #[test]
     fn image_impl() {
-        use assist::Asset;
+        use glace::Asset;
 
-        let _img: assist::load::RgbaImage = Sprites::Happy.value();
+        let _img: glace::load::RgbaImage = Sprites::Happy.value();
     }
 
     #[test]
     fn json_impl() {
-        use assist::SerdeAsset;
+        use glace::SerdeAsset;
 
         #[derive(serde::Deserialize)]
         struct Thing {
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn specific_serde_impl() {
-        use assist::Asset;
+        use glace::Asset;
 
         let dev: Profile = assets::profiles::Profiles::Dev.value();
         let release: Profile = assets::profiles::Profiles::Release.value();
@@ -240,8 +240,8 @@ mod tests {
 
     #[test]
     fn virtual_impl() {
-        use assist::Asset;
-        use assist::CachedAsset;
+        use glace::Asset;
+        use glace::CachedAsset;
 
         let item_1 = assets::items::Items::Item1.value();
         let item_2 = assets::items::Items::Item2.value();
@@ -257,8 +257,8 @@ mod tests {
 
     #[test]
     fn edres_impl() {
-        use assist::Asset;
-        use assist::CachedAsset;
+        use glace::Asset;
+        use glace::CachedAsset;
 
         let item = assets::autoprofiles::Autoprofiles::Dev;
         let value: assets::autoprofiles::AutoprofilesValue = item.value();
@@ -271,8 +271,8 @@ mod tests {
 
     #[test]
     fn edres_impl_single() {
-        use assist::Asset;
-        use assist::CachedAsset;
+        use glace::Asset;
+        use glace::CachedAsset;
 
         let config = assets::autoconfig::Autoconfig;
         let value: assets::autoconfig::AutoconfigValue = config.value();
@@ -285,8 +285,8 @@ mod tests {
 
     #[test]
     fn edres_impl_virtual() {
-        use assist::Asset;
-        use assist::CachedAsset;
+        use glace::Asset;
+        use glace::CachedAsset;
 
         let item = assets::autoitems::Autoitems::Item1;
         let value: assets::autoitems::AutoitemsValue = item.value();
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn prelude() {
         use assets::prelude::*;
-        use assist::Asset;
+        use glace::Asset;
 
         assert_eq!(Items::Item1.value().name, "Item one");
         assert_eq!(Json::SecondaryJsonFile.value().name, "two");

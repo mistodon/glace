@@ -40,7 +40,7 @@ struct AssistMacro {
 
 impl Parse for AssistMacro {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        let mut alias = to_ident("assist");
+        let mut alias = to_ident("glace");
         if input.parse::<Token![crate]>().is_ok() {
             alias = to_ident("crate");
             input.parse::<Token![,]>()?;
@@ -157,19 +157,19 @@ fn to_ident(x: &str) -> Ident {
 }
 
 fn generate_toplevel_module(
-    assist: &Ident,
+    glace: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
     singles: HashSet<PathBuf>,
     path: &Path,
     mod_name: &str,
 ) -> TokenStream2 {
-    let (tokens, _) = generate_modules(assist, overrides, virtuals, singles, path, mod_name, None);
+    let (tokens, _) = generate_modules(glace, overrides, virtuals, singles, path, mod_name, None);
     tokens
 }
 
 fn generate_modules(
-    assist: &Ident,
+    glace: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
     singles: HashSet<PathBuf>,
@@ -179,7 +179,7 @@ fn generate_modules(
 ) -> (TokenStream2, TokenStream2) {
     if singles.contains(path) {
         generate_single_module(
-            assist,
+            glace,
             overrides,
             virtuals,
             singles,
@@ -190,7 +190,7 @@ fn generate_modules(
         .unwrap()
     } else if virtuals.contains(path) {
         generate_virtual_module(
-            assist,
+            glace,
             overrides,
             virtuals,
             singles,
@@ -201,7 +201,7 @@ fn generate_modules(
         .unwrap()
     } else {
         generate_dir_module(
-            assist, overrides, virtuals, singles, path, mod_name, parents,
+            glace, overrides, virtuals, singles, path, mod_name, parents,
         )
         .unwrap()
     }
@@ -283,34 +283,34 @@ impl MainType {
 
 #[allow(unused_variables)]
 fn serde_asset_impl(
-    assist: &Ident,
+    glace: &Ident,
     item_name: &Ident,
     main_type: MainType,
 ) -> Option<TokenStream2> {
     match main_type {
         #[cfg(feature = "serde_json")]
         MainType::Json => Some(quote!(
-            impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_json(bytes)
+            impl #glace::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #glace::Result<T> {
+                    #glace::_internal::load::load_json(bytes)
                 }
             }
         )),
 
         #[cfg(feature = "serde_toml")]
         MainType::Toml => Some(quote!(
-            impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_toml(bytes)
+            impl #glace::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #glace::Result<T> {
+                    #glace::_internal::load::load_toml(bytes)
                 }
             }
         )),
 
         #[cfg(feature = "serde_yaml")]
         MainType::Yaml => Some(quote!(
-            impl #assist::SerdeAsset for #item_name {
-                fn deserialize<'b, T: for<'a> #assist::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #assist::Result<T> {
-                    #assist::load::load_yaml(bytes)
+            impl #glace::SerdeAsset for #item_name {
+                fn deserialize<'b, T: for<'a> #glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #glace::Result<T> {
+                    #glace::_internal::load::load_yaml(bytes)
                 }
             }
         )),
@@ -320,18 +320,18 @@ fn serde_asset_impl(
 }
 
 fn asset_impl(
-    assist: &Ident,
+    glace: &Ident,
     item_name: &Ident,
     main_type: MainType,
     value_type: Option<&Type>,
 ) -> Option<TokenStream2> {
     let _serde_impl = value_type.map(|ty| {
         quote!(
-            impl #assist::Asset for #item_name {
+            impl #glace::Asset for #item_name {
                 type Value = #ty;
 
-                fn load(bytes: Cow<[u8]>) -> #assist::Result<Self::Value> {
-                    <Self as #assist::SerdeAsset>::deserialize(bytes)
+                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
+                    <Self as #glace::SerdeAsset>::deserialize(bytes)
                 }
             }
         )
@@ -340,11 +340,11 @@ fn asset_impl(
     match main_type {
         #[cfg(feature = "image")]
         MainType::Image => Some(quote!(
-            impl #assist::Asset for #item_name {
-                type Value = #assist::load::RgbaImage;
+            impl #glace::Asset for #item_name {
+                type Value = #glace::_internal::load::RgbaImage;
 
-                fn load(bytes: Cow<[u8]>) -> #assist::Result<Self::Value> {
-                    #assist::load::load_image(bytes)
+                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
+                    #glace::_internal::load::load_image(bytes)
                 }
             }
         )),
@@ -363,19 +363,19 @@ fn asset_impl(
 }
 
 fn cache_and_impl(
-    assist: &Ident,
+    glace: &Ident,
     item_name: &Ident,
     is_asset: bool,
 ) -> (Option<TokenStream2>, Option<TokenStream2>) {
     if cfg!(feature = "self_cached") && is_asset {
         let self_cache = quote!(
-            #assist::lazy_static! {
-                pub static ref CACHE: #assist::cache::RwCache<#item_name, <#item_name as #assist::Asset>::Value> = #assist::cache::RwCache::new();
+            #glace::lazy_static::lazy_static! {
+                pub static ref CACHE: #glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value> = #glace::cache::RwCache::new();
             }
         );
         let cached_impl = quote!(
-            impl #assist::CachedAsset for #item_name {
-                fn cache() -> &'static #assist::cache::RwCache<Self, Self::Value> {
+            impl #glace::CachedAsset for #item_name {
+                fn cache() -> &'static #glace::cache::RwCache<Self, Self::Value> {
                     &CACHE
                 }
             }
@@ -402,7 +402,7 @@ fn override_type<'a>(
 }
 
 fn generate_dir_module(
-    assist: &Ident,
+    glace: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     virtuals: HashSet<PathBuf>,
     singles: HashSet<PathBuf>,
@@ -450,7 +450,7 @@ fn generate_dir_module(
                 .unwrap()
                 .to_case(Case::Snake);
             generate_modules(
-                assist,
+                glace,
                 overrides,
                 virtuals_1.clone(),
                 singles_1.clone(),
@@ -522,42 +522,42 @@ fn generate_dir_module(
         let [unknown_try_bytes, try_bytes_modified, try_load_bytes, unknown_try_string] =
             match has_disk {
                 true => [
-                    quote!(Cow::Owned(#assist::internal::fetch_bytes(_index)?)),
-                    quote!(#assist::internal::fetch_bytes_modified(self.try_path()?.as_ref(), previous_modified)),
+                    quote!(Cow::Owned(#glace::_internal::fetch_bytes(_index)?)),
+                    quote!(#glace::_internal::fetch_bytes_modified(self.try_path()?.as_ref(), previous_modified)),
                     quote!(Ok(std::fs::read(self.try_path()?)?)),
-                    quote!(Cow::Owned(#assist::internal::fetch_string(_index)?)),
+                    quote!(Cow::Owned(#glace::_internal::fetch_string(_index)?)),
                 ],
                 false => [
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
                     quote!(Ok(match previous_modified {
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
                 ],
             };
 
         quote!(
             impl BytesAsset for #enum_name {
-                fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
+                fn try_bytes(&self) -> #glace::Result<Cow<'static, [u8]>> {
                     Ok(match *self {
                         Self::_Path(_index) => #unknown_try_bytes,
                         c => #known_try_bytes,
                     })
                 }
 
-                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #assist::Result<Option<(Vec<u8>, SystemTime)>> {
+                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #glace::Result<Option<(Vec<u8>, SystemTime)>> {
                     #try_bytes_modified
                 }
 
-                fn try_load_bytes(&self) -> #assist::Result<Vec<u8>> {
+                fn try_load_bytes(&self) -> #glace::Result<Vec<u8>> {
                     #try_load_bytes
                 }
             }
 
             impl StrAsset for #enum_name {
-                fn try_string(&self) -> #assist::Result<Cow<'static, str>> {
+                fn try_string(&self) -> #glace::Result<Cow<'static, str>> {
                     Ok(match *self {
                         Self::_Path(_index) => #unknown_try_string,
                         c => #known_try_string,
@@ -568,7 +568,7 @@ fn generate_dir_module(
     });
 
     let main_type = MainType::of(&files).asset_type();
-    let serde_asset_impl = serde_asset_impl(assist, &enum_name, main_type);
+    let serde_asset_impl = serde_asset_impl(glace, &enum_name, main_type);
 
     let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
         let overridden = override_type(overrides, path);
@@ -623,9 +623,9 @@ fn generate_dir_module(
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
-    let asset_impl = asset_impl(assist, &enum_name, main_type, specific_type);
+    let asset_impl = asset_impl(glace, &enum_name, main_type, specific_type);
 
-    let (self_cache, self_cache_impl) = cache_and_impl(assist, &enum_name, asset_impl.is_some());
+    let (self_cache, self_cache_impl) = cache_and_impl(glace, &enum_name, asset_impl.is_some());
 
     let const_data: Option<TokenStream2> = cfg!(not(feature = "disable_const_data")).then(|| {
         quote!(
@@ -668,7 +668,7 @@ fn generate_dir_module(
                 time::SystemTime,
             };
 
-            use #assist::{FileAsset, BytesAsset, StrAsset};
+            use #glace::{FileAsset, BytesAsset, StrAsset};
 
             #edres_tokens
 
@@ -710,7 +710,7 @@ fn generate_dir_module(
 
                 // TODO(disk_io)
                 pub fn all_variants() -> impl Iterator<Item=Self> {
-                    #assist::internal::visit_files(Self::PARENT.as_ref(), Self::from_path)
+                    #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::from_path)
                 }
 
                 fn path_ref(path: &Path) -> Cow<'static, Path> {
@@ -719,7 +719,7 @@ fn generate_dir_module(
 
                 // TODO(disk_io)
                 pub fn all_paths() -> impl Iterator<Item=Cow<'static, Path>> {
-                    #assist::internal::visit_files(Self::PARENT.as_ref(), Self::path_ref)
+                    #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::path_ref)
                 }
             }
 
@@ -740,45 +740,45 @@ fn generate_dir_module(
 
                 fn from_path_unchecked(path: &Path) -> Self {
                     Self::from_const_path(path)
-                        .unwrap_or_else(|| Self::_Path(#assist::internal::fetch_path_index(path)))
+                        .unwrap_or_else(|| Self::_Path(#glace::_internal::fetch_path_index(path)))
                 }
 
-                fn try_path(self) -> #assist::Result<Cow<'static, Path>> {
+                fn try_path(self) -> #glace::Result<Cow<'static, Path>> {
                     Ok(match self {
-                        Self::_Path(index) => Cow::Owned(#assist::internal::fetch_path(index)?),
+                        Self::_Path(index) => Cow::Owned(#glace::_internal::fetch_path(index)?),
                         c => Cow::Borrowed(c.const_path().as_ref()),
                     })
                 }
             }
 
-            impl #assist::serde::Serialize for #enum_name {
+            impl #glace::serde::Serialize for #enum_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
-                    S: #assist::serde::Serializer
+                    S: #glace::serde::Serializer
                 {
                     match *self {
                         Self::_Path(_) => {
                             let path = self.path();
-                            let key = #assist::PathedKey::Path { path: path.as_ref() };
+                            let key = #glace::PathedKey::Path { path: path.as_ref() };
                             key.serialize(serializer)
                         },
                         c => {
-                            let key = #assist::PathedKey::Known(self.const_name());
+                            let key = #glace::PathedKey::Known(self.const_name());
                             key.serialize(serializer)
                         }
                     }
                 }
             }
 
-            impl<'de> #assist::serde::Deserialize<'de> for #enum_name {
+            impl<'de> #glace::serde::Deserialize<'de> for #enum_name {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
-                    D: #assist::serde::Deserializer<'de>
+                    D: #glace::serde::Deserializer<'de>
                 {
-                    let key: #assist::PathedKey = #assist::PathedKey::deserialize::<D>(deserializer)?;
+                    let key: #glace::PathedKey = #glace::PathedKey::deserialize::<D>(deserializer)?;
                     Ok(match key {
-                        #assist::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                        #assist::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
+                        #glace::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
+                        #glace::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
                     })
                 }
             }
@@ -799,7 +799,7 @@ fn generate_dir_module(
 }
 
 fn generate_virtual_module(
-    assist: &Ident,
+    glace: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     _virtuals: HashSet<PathBuf>,
     _singles: HashSet<PathBuf>,
@@ -872,22 +872,22 @@ fn generate_virtual_module(
     let try_load_all_fn: TokenStream2 = match main_type {
         #[cfg(feature = "serde_json")]
         MainType::Json => quote!(
-            fn try_load_all(bytes: &[u8]) -> #assist::Result<#assist::IndexMap<Self, Vec<u8>>> {
-                #assist::load::load_all_json(bytes)
+            fn try_load_all(bytes: &[u8]) -> #glace::Result<#glace::indexmap::IndexMap<Self, Vec<u8>>> {
+                #glace::_internal::load::load_all_json(bytes)
             }
         ),
 
         #[cfg(feature = "serde_toml")]
         MainType::Toml => quote!(
-            fn try_load_all(bytes: &[u8]) -> #assist::Result<#assist::IndexMap<Self, Vec<u8>>> {
-                #assist::load::load_all_toml(bytes)
+            fn try_load_all(bytes: &[u8]) -> #glace::Result<#glace::indexmap::IndexMap<Self, Vec<u8>>> {
+                #glace::_internal::load::load_all_toml(bytes)
             }
         ),
 
         #[cfg(feature = "serde_yaml")]
         MainType::Yaml => quote!(
-            fn try_load_all(bytes: &[u8]) -> #assist::Result<#assist::IndexMap<Self, Vec<u8>>> {
-                #assist::load::load_all_yaml(bytes)
+            fn try_load_all(bytes: &[u8]) -> #glace::Result<#glace::indexmap::IndexMap<Self, Vec<u8>>> {
+                #glace::_internal::load::load_all_yaml(bytes)
             }
         ),
         _ => Err(eyre!("Need at least one serde feature enabled"))?,
@@ -915,7 +915,7 @@ fn generate_virtual_module(
                         let mut all = Self::try_load_all(&source)?;
                         Cow::Owned(all.remove(self).expect("TODO"))
                     }),
-                    quote!(Ok(match #assist::internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)? {
+                    quote!(Ok(match #glace::_internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)? {
                         Some((bytes, time)) => {
                             let mut all = Self::try_load_all(&bytes)?;
                             Some((all.remove(self).expect("TODO"), time))
@@ -934,36 +934,36 @@ fn generate_virtual_module(
                     }),
                 ],
                 false => [
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
                     quote!(Ok(match previous_modified {
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
                 ],
             };
 
         quote!(
             impl BytesAsset for #enum_name {
-                fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
+                fn try_bytes(&self) -> #glace::Result<Cow<'static, [u8]>> {
                     Ok(match *self {
                         Self::_Unknown(_index) => #unknown_try_bytes,
                         c => #known_try_bytes,
                     })
                 }
 
-                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #assist::Result<Option<(Vec<u8>, SystemTime)>> {
+                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #glace::Result<Option<(Vec<u8>, SystemTime)>> {
                     #try_bytes_modified
                 }
 
-                fn try_load_bytes(&self) -> #assist::Result<Vec<u8>> {
+                fn try_load_bytes(&self) -> #glace::Result<Vec<u8>> {
                     #try_load_bytes
                 }
             }
 
             impl StrAsset for #enum_name {
-                fn try_string(&self) -> #assist::Result<Cow<'static, str>> {
+                fn try_string(&self) -> #glace::Result<Cow<'static, str>> {
                     Ok(match *self {
                         Self::_Unknown(_index) => #unknown_try_string,
                         c => #known_try_string,
@@ -1024,10 +1024,10 @@ fn generate_virtual_module(
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
-    let asset_impl = asset_impl(assist, &enum_name, asset_type, specific_type);
-    let serde_asset_impl = serde_asset_impl(assist, &enum_name, asset_type);
+    let asset_impl = asset_impl(glace, &enum_name, asset_type, specific_type);
+    let serde_asset_impl = serde_asset_impl(glace, &enum_name, asset_type);
 
-    let (self_cache, self_cache_impl) = cache_and_impl(assist, &enum_name, asset_impl.is_some());
+    let (self_cache, self_cache_impl) = cache_and_impl(glace, &enum_name, asset_impl.is_some());
 
     let tokens = quote!(
         pub mod #mod_name {
@@ -1041,7 +1041,7 @@ fn generate_virtual_module(
                 time::SystemTime,
             };
 
-            use #assist::{VirtualAsset, BytesAsset, StrAsset};
+            use #glace::{VirtualAsset, BytesAsset, StrAsset};
 
             #edres_tokens
 
@@ -1092,32 +1092,32 @@ fn generate_virtual_module(
 
                 fn from_name(name: &str) -> Self {
                     Self::from_const_name(name)
-                        .unwrap_or_else(|| Self::_Unknown(#assist::internal::fetch_name_index(name)))
+                        .unwrap_or_else(|| Self::_Unknown(#glace::_internal::fetch_name_index(name)))
                 }
 
-                fn try_name(self) -> #assist::Result<Cow<'static, str>> {
+                fn try_name(self) -> #glace::Result<Cow<'static, str>> {
                     Ok(match self {
-                        Self::_Unknown(index) => Cow::Owned(#assist::internal::fetch_name(index)?),
+                        Self::_Unknown(index) => Cow::Owned(#glace::_internal::fetch_name(index)?),
                         c => Cow::Borrowed(c.const_name()),
                     })
                 }
             }
 
-            impl #assist::serde::Serialize for #enum_name {
+            impl #glace::serde::Serialize for #enum_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
-                    S: #assist::serde::Serializer
+                    S: #glace::serde::Serializer
                 {
                     self.name().serialize(serializer)
                 }
             }
 
-            impl<'de> #assist::serde::Deserialize<'de> for #enum_name {
+            impl<'de> #glace::serde::Deserialize<'de> for #enum_name {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
-                    D: #assist::serde::Deserializer<'de>
+                    D: #glace::serde::Deserializer<'de>
                 {
-                    let name: &'de str = <&'de str as #assist::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
+                    let name: &'de str = <&'de str as #glace::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
                     Ok(Self::from_name(name))
                 }
             }
@@ -1137,7 +1137,7 @@ fn generate_virtual_module(
 
 #[allow(unused_variables)]
 fn generate_single_module(
-    assist: &Ident,
+    glace: &Ident,
     overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
     _virtuals: HashSet<PathBuf>,
     _singles: HashSet<PathBuf>,
@@ -1189,7 +1189,7 @@ fn generate_single_module(
         let [try_bytes_modified, try_load_bytes] =
             match has_disk {
                 true => [
-                    quote!(#assist::internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)),
+                    quote!(#glace::_internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)),
                     quote!(
                         Ok(std::fs::read(Self::PATH)?)
                     ),
@@ -1199,27 +1199,27 @@ fn generate_single_module(
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#assist::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
                 ],
             };
 
         quote!(
             impl BytesAsset for #struct_name {
-                fn try_bytes(&self) -> #assist::Result<Cow<'static, [u8]>> {
+                fn try_bytes(&self) -> #glace::Result<Cow<'static, [u8]>> {
                     Ok(#known_try_bytes)
                 }
 
-                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #assist::Result<Option<(Vec<u8>, SystemTime)>> {
+                fn try_bytes_modified(&self, previous_modified: Option<SystemTime>) -> #glace::Result<Option<(Vec<u8>, SystemTime)>> {
                     #try_bytes_modified
                 }
 
-                fn try_load_bytes(&self) -> #assist::Result<Vec<u8>> {
+                fn try_load_bytes(&self) -> #glace::Result<Vec<u8>> {
                     #try_load_bytes
                 }
             }
 
             impl StrAsset for #struct_name {
-                fn try_string(&self) -> #assist::Result<Cow<'static, str>> {
+                fn try_string(&self) -> #glace::Result<Cow<'static, str>> {
                     Ok(#known_try_string)
                 }
             }
@@ -1278,9 +1278,9 @@ fn generate_single_module(
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
 
-    let serde_asset_impl = serde_asset_impl(assist, &struct_name, asset_type);
-    let asset_impl = asset_impl(assist, &struct_name, asset_type, specific_type);
-    let (self_cache, self_cache_impl) = cache_and_impl(assist, &struct_name, asset_impl.is_some());
+    let serde_asset_impl = serde_asset_impl(glace, &struct_name, asset_type);
+    let asset_impl = asset_impl(glace, &struct_name, asset_type, specific_type);
+    let (self_cache, self_cache_impl) = cache_and_impl(glace, &struct_name, asset_impl.is_some());
 
     let tokens = quote!(
         pub mod #mod_name {
@@ -1294,13 +1294,13 @@ fn generate_single_module(
                 time::SystemTime,
             };
 
-            use #assist::{SingleAsset, BytesAsset, StrAsset};
+            use #glace::{SingleAsset, BytesAsset, StrAsset};
 
             #edres_tokens
 
             #self_cache
 
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, #glace::serde::Serialize, #glace::serde::Deserialize)]
             pub struct #struct_name;
 
             impl #struct_name {
@@ -1317,25 +1317,6 @@ fn generate_single_module(
                 const PATH: &'static str = #file_path;
             }
 
-            impl #assist::serde::Serialize for #struct_name {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                    S: #assist::serde::Serializer
-                {
-                    (()).serialize(serializer)
-                }
-            }
-
-            impl<'de> #assist::serde::Deserialize<'de> for #struct_name {
-                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                where
-                    D: #assist::serde::Deserializer<'de>
-                {
-                    let _: () = <() as #assist::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
-                    Ok(#struct_name)
-                }
-            }
-
             #base_asset_impls
 
             #serde_asset_impl
@@ -1350,7 +1331,7 @@ fn generate_single_module(
 }
 
 #[proc_macro]
-pub fn assist(stream: TokenStream) -> TokenStream {
+pub fn glace(stream: TokenStream) -> TokenStream {
     let crate_dir = std::env::var_os("CARGO_MANIFEST_DIR");
     if let Some(path) = crate_dir {
         std::env::set_current_dir(path).unwrap();
