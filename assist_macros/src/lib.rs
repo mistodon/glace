@@ -207,7 +207,7 @@ fn generate_modules(
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum MainType {
     None,
 
@@ -1250,7 +1250,7 @@ fn generate_single_module(
                     edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
                 }
 
-                _ => Err(eyre!("Need at least one serde feature enabled"))?,
+                x => Err(eyre!("Failed to parse the file at `{path}`, detected to be a file of type `{x:?}`\n(Have you enabled the relevant `edres_*` feature?)", path=path.display()))?,
             };
 
             let tokens = edres::codegen::define_structs(
