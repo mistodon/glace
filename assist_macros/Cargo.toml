@@ -7,9 +7,9 @@ edition = "2021"
 proc-macro = true
 
 [features]
-edres_json = ["edres", "edres/json"]
-edres_toml = ["edres", "edres/toml"]
-edres_yaml = ["edres", "edres/yaml"]
+edres_json = ["edres", "edres/json", "serde_json"]
+edres_toml = ["edres", "edres/toml", "serde_toml"]
+edres_yaml = ["edres", "edres/yaml", "serde_yaml"]
 image = ["dep:image"]
 self_cached = []
 serde_json = ["dep:serde_json"]

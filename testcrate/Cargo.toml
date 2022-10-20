@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-assist = { path = "../assist", features = ["visit_includes_skipped"] }
+assist = { path = "../assist", features = [ "edres_json", "edres_toml", "edres_yaml", "image", "self_cached", "visit_includes_skipped" ] }
 serde = { version = "1.0", features = ["derive"] }
