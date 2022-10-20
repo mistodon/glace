@@ -568,45 +568,63 @@ fn generate_dir_module(
         if overridden.is_some() {
             (overridden.map(Cow::Borrowed), None)
         } else {
-            let value_str_name = format!("{}Value", enum_str_name);
-            let value_name = to_ident(&value_str_name);
-            let format = match main_type {
-                #[cfg(feature = "edres_json")]
-                MainType::Json => Some(edres::Format::Json),
+            #[cfg(any(feature = "edres_json", feature = "edres_toml", feature = "edres_yaml"))]
+            {
+                let value_str_name = format!("{}Value", enum_str_name);
+                let value_name = to_ident(&value_str_name);
+                let format: Option<edres::Format> = match main_type {
+                    #[cfg(feature = "edres_json")]
+                    MainType::Json => Some(edres::Format::Json),
 
-                #[cfg(feature = "edres_toml")]
-                MainType::Toml => Some(edres::Format::Toml),
+                    #[cfg(feature = "edres_toml")]
+                    MainType::Toml => Some(edres::Format::Toml),
 
-                #[cfg(feature = "edres_yaml")]
-                MainType::Yaml => Some(edres::Format::Yaml),
+                    #[cfg(feature = "edres_yaml")]
+                    MainType::Yaml => Some(edres::Format::Yaml),
 
-                _ => None,
-            };
+                    _ => None,
+                };
 
-            if let Some(format) = format {
-                let tokens = edres::codegen::define_structs_from_file_contents(
-                    path,
-                    &value_str_name,
-                    Some(format),
-                    &edres::Options {
-                        serde_support: edres::SerdeSupport::Yes,
-                        structs: edres::StructOptions {
-                            derived_traits: vec![
-                                "Debug".into(),
-                                "Clone".into(),
-                                "PartialEq".into(),
-                            ]
-                            .into(),
-                            ..edres::StructOptions::minimal()
+                if let Some(format) = format {
+                    let tokens = Some(edres::codegen::define_structs_from_file_contents(
+                        path,
+                        &value_str_name,
+                        Some(format),
+                        &edres::Options {
+                            serde_support: edres::SerdeSupport::Yes,
+                            structs: edres::StructOptions {
+                                derived_traits: vec![
+                                    "Debug".into(),
+                                    "Clone".into(),
+                                    "PartialEq".into(),
+                                ]
+                                .into(),
+                                ..edres::StructOptions::minimal()
+                            },
+                            ..edres::Options::minimal()
                         },
-                        ..edres::Options::minimal()
-                    },
-                )?;
+                    )?);
 
-                let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+                    #[cfg(not(any(
+                        feature = "edres_json",
+                        feature = "edres_toml",
+                        feature = "edres_yaml"
+                    )))]
+                    let tokens = None;
 
-                (Some(specific_type), Some(tokens))
-            } else {
+                    let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+
+                    (Some(specific_type), tokens)
+                } else {
+                    (None, None)
+                }
+            }
+            #[cfg(not(any(
+                feature = "edres_json",
+                feature = "edres_toml",
+                feature = "edres_yaml"
+            )))]
+            {
                 (None, None)
             }
         }
@@ -971,45 +989,68 @@ fn generate_virtual_module(
         if overridden.is_some() {
             (overridden.map(Cow::Borrowed), None)
         } else {
-            let source = std::fs::read_to_string(path)?;
-            let value_str_name = format!("{}Value", enum_str_name);
-            let value_name = to_ident(&value_str_name);
-            let value = match main_type {
-                #[cfg(feature = "edres_json")]
-                MainType::Json => {
-                    edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
-                }
+            #[cfg(any(feature = "edres_json", feature = "edres_toml", feature = "edres_yaml"))]
+            {
+                let source = std::fs::read_to_string(path)?;
+                let value_str_name = format!("{}Value", enum_str_name);
+                let value_name = to_ident(&value_str_name);
+                let value = match main_type {
+                    #[cfg(feature = "edres_json")]
+                    MainType::Json => {
+                        edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
+                    }
 
-                #[cfg(feature = "edres_toml")]
-                MainType::Toml => {
-                    edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
-                }
+                    #[cfg(feature = "edres_toml")]
+                    MainType::Toml => {
+                        edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
+                    }
 
-                #[cfg(feature = "edres_yaml")]
-                MainType::Yaml => {
-                    edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
-                }
+                    #[cfg(feature = "edres_yaml")]
+                    MainType::Yaml => {
+                        edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
+                    }
 
-                _ => Err(eyre!("Need at least one serde feature enabled"))?,
-            };
+                    _ => Err(eyre!("Need at least one serde feature enabled"))?,
+                };
 
-            let tokens = edres::codegen::define_structs_from_values(
-                &value.assume_struct()?,
-                &value_str_name,
-                &edres::Options {
-                    serde_support: edres::SerdeSupport::Yes,
-                    structs: edres::StructOptions {
-                        derived_traits: vec!["Debug".into(), "Clone".into(), "PartialEq".into()]
+                let tokens = Some(edres::codegen::define_structs_from_values(
+                    &value.assume_struct()?,
+                    &value_str_name,
+                    &edres::Options {
+                        serde_support: edres::SerdeSupport::Yes,
+                        structs: edres::StructOptions {
+                            derived_traits: vec![
+                                "Debug".into(),
+                                "Clone".into(),
+                                "PartialEq".into(),
+                            ]
                             .into(),
-                        ..edres::StructOptions::minimal()
+                            ..edres::StructOptions::minimal()
+                        },
+                        ..edres::Options::minimal()
                     },
-                    ..edres::Options::minimal()
-                },
-            )?;
+                )?);
 
-            let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+                #[cfg(not(any(
+                    feature = "edres_json",
+                    feature = "edres_toml",
+                    feature = "edres_yaml"
+                )))]
+                let tokens = None;
 
-            (Some(specific_type), Some(tokens))
+                let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+
+                (Some(specific_type), tokens)
+            }
+
+            #[cfg(not(any(
+                feature = "edres_json",
+                feature = "edres_toml",
+                feature = "edres_yaml"
+            )))]
+            {
+                (None, None)
+            }
         }
     };
     let specific_type: Option<&Type> = specific_type.as_deref();
@@ -1246,7 +1287,8 @@ fn generate_single_module(
                 x => Err(eyre!("Failed to parse the file at `{path}`, detected to be a file of type `{x:?}`\n(Have you enabled the relevant `edres_*` feature?)", path=path.display()))?,
             };
 
-            let tokens = edres::codegen::define_structs(
+            #[cfg(any(feature = "edres_json", feature = "edres_toml", feature = "edres_yaml"))]
+            let tokens = Some(edres::codegen::define_structs(
                 &value.assume_struct()?,
                 &value_str_name,
                 Some(path),
@@ -1259,11 +1301,17 @@ fn generate_single_module(
                     },
                     ..edres::Options::minimal()
                 },
-            )?;
+            )?);
+            #[cfg(not(any(
+                feature = "edres_json",
+                feature = "edres_toml",
+                feature = "edres_yaml"
+            )))]
+            let tokens = None;
 
             let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
 
-            (Some(specific_type), Some(tokens))
+            (Some(specific_type), tokens)
         }
     };
     let specific_type: Option<&Type> = specific_type.as_deref();
