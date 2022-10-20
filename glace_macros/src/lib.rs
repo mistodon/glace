@@ -88,25 +88,25 @@ impl Parse for Override {
 enum OverrideProperty {
     Single,
     Virtual,
-    WithCache,
-    NoCache,
-    WithConst,
-    NoConst,
-    WithIo,
-    NoIo,
-    WithSerde,
-    NoSerde,
-    WithEdres,
-    NoEdres,
-    Transpose(TransposeType),
+    // WithCache,
+    // NoCache,
+    // WithConst,
+    // NoConst,
+    // WithIo,
+    // NoIo,
+    // WithSerde,
+    // NoSerde,
+    // WithEdres,
+    // NoEdres,
+    // Transpose(TransposeType),
     Serde(Box<Type>),
 }
 
-enum TransposeType {
-    Required,
-    Option,
-    Default,
-}
+// enum TransposeType {
+//     Required,
+//     Option,
+//     Default,
+// }
 
 impl Parse for OverrideProperty {
     fn parse(input: ParseStream) -> ParseResult<Self> {
@@ -115,30 +115,30 @@ impl Parse for OverrideProperty {
         let value = match ident.to_string().as_str() {
             "Single" => OverrideProperty::Single,
             "Virtual" => OverrideProperty::Virtual,
-            "WithCache" => OverrideProperty::WithCache,
-            "NoCache" => OverrideProperty::NoCache,
-            "WithConst" => OverrideProperty::WithConst,
-            "NoConst" => OverrideProperty::NoConst,
-            "WithIo" => OverrideProperty::WithIo,
-            "NoIo" => OverrideProperty::NoIo,
-            "WithSerde" => OverrideProperty::WithSerde,
-            "NoSerde" => OverrideProperty::NoSerde,
-            "WithEdres" => OverrideProperty::WithEdres,
-            "NoEdres" => OverrideProperty::NoEdres,
-            "Transpose" => {
-                let mut kind = TransposeType::Required;
-                if input.parse::<Token![<]>().is_ok() {
-                    let ident = input.parse::<syn::Ident>()?;
-                    kind = match ident.to_string().as_str() {
-                        "Required" => TransposeType::Required,
-                        "Default" => TransposeType::Default,
-                        "Option" => TransposeType::Option,
-                        _ => return Err(Error::new(ident.span(), "Unrecognized transpose type")),
-                    };
-                    input.parse::<Token![>]>()?;
-                }
-                OverrideProperty::Transpose(kind)
-            }
+            // "WithCache" => OverrideProperty::WithCache,
+            // "NoCache" => OverrideProperty::NoCache,
+            // "WithConst" => OverrideProperty::WithConst,
+            // "NoConst" => OverrideProperty::NoConst,
+            // "WithIo" => OverrideProperty::WithIo,
+            // "NoIo" => OverrideProperty::NoIo,
+            // "WithSerde" => OverrideProperty::WithSerde,
+            // "NoSerde" => OverrideProperty::NoSerde,
+            // "WithEdres" => OverrideProperty::WithEdres,
+            // "NoEdres" => OverrideProperty::NoEdres,
+            // "Transpose" => {
+            //     let mut kind = TransposeType::Required;
+            //     if input.parse::<Token![<]>().is_ok() {
+            //         let ident = input.parse::<syn::Ident>()?;
+            //         kind = match ident.to_string().as_str() {
+            //             "Required" => TransposeType::Required,
+            //             "Default" => TransposeType::Default,
+            //             "Option" => TransposeType::Option,
+            //             _ => return Err(Error::new(ident.span(), "Unrecognized transpose type")),
+            //         };
+            //         input.parse::<Token![>]>()?;
+            //     }
+            //     OverrideProperty::Transpose(kind)
+            // }
             "Serde" => {
                 input.parse::<Token![<]>()?;
                 let r#type = input.parse::<Type>()?;
@@ -200,10 +200,7 @@ fn generate_modules(
         )
         .unwrap()
     } else {
-        generate_dir_module(
-            glace, overrides, virtuals, singles, path, mod_name, parents,
-        )
-        .unwrap()
+        generate_dir_module(glace, overrides, virtuals, singles, path, mod_name, parents).unwrap()
     }
 }
 
@@ -282,11 +279,7 @@ impl MainType {
 }
 
 #[allow(unused_variables)]
-fn serde_asset_impl(
-    glace: &Ident,
-    item_name: &Ident,
-    main_type: MainType,
-) -> Option<TokenStream2> {
+fn serde_asset_impl(glace: &Ident, item_name: &Ident, main_type: MainType) -> Option<TokenStream2> {
     match main_type {
         #[cfg(feature = "serde_json")]
         MainType::Json => Some(quote!(

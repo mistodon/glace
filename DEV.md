@@ -1,9 +1,9 @@
 # Asset management / staticfs
 
 - [ ] Document the public API
-- [ ] Comment out incomplete features
-- [ ] Make serde (temporarily) non-optional
-- [ ] Make a proper README
+- [x] Comment out incomplete features
+- [x] Make serde (temporarily) non-optional
+- [x] Make a proper README
 - [ ] And a proper Cargo.toml
 - [ ] Release 0.1.0
 

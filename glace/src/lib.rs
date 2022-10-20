@@ -4,7 +4,7 @@ pub use indexmap;
 #[cfg(feature = "self_cached")]
 pub use lazy_static;
 
-#[cfg(feature = "serde")]
+//#[cfg(feature = "serde")]
 pub use serde;
 
 pub mod _internal;
@@ -23,8 +23,10 @@ use thiserror::Error;
 
 use crate::cache::RwCache;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(untagged))]
+//#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+//#[cfg_attr(feature = "serde", serde(untagged))]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum PathedKey<'a> {
     Known(&'a str),
     Path { path: &'a Path },
@@ -231,7 +233,7 @@ pub trait Asset: BytesAsset {
     }
 }
 
-#[cfg(feature = "serde")]
+//#[cfg(feature = "serde")]
 pub trait SerdeAsset: BytesAsset {
     fn deserialize<'b, T: for<'a> serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> Result<T>;
 

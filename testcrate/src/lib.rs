@@ -26,7 +26,7 @@ where
     "assets/config.toml": Single + Serde<Config>,
     "assets/items.yaml": Virtual + Serde<ItemData>,
     "assets/profiles": Serde<Profile>,
-    "assets/languages": Transpose,
+    // "assets/languages": Transpose,
 }
 
 #[cfg(test)]
@@ -209,7 +209,7 @@ mod tests {
     fn image_impl() {
         use glace::Asset;
 
-        let _img: glace::load::RgbaImage = Sprites::Happy.value();
+        let _img: glace::_internal::load::RgbaImage = Sprites::Happy.value();
     }
 
     #[test]

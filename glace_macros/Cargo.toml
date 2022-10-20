@@ -2,6 +2,12 @@
 name = "glace_macros"
 version = "0.1.0"
 edition = "2021"
+authors = ["Vi <violet@hey.com>"]
+description = "Internals for the glace crate."
+homepage = "https://github.com/mistodon/glace"
+repository = "https://github.com/mistodon/glace"
+readme = "../README.md"
+license = "CC0-1.0"
 
 [lib]
 proc-macro = true
@@ -16,8 +22,8 @@ serde_json = ["dep:serde_json"]
 serde_toml = ["dep:toml"]
 serde_yaml = ["dep:serde_yaml"]
 
-disable_const_data = []
-disable_disk_io = []
+#disable_const_data = []
+#disable_disk_io = []
 
 [dependencies]
 convert_case = "0.6"
