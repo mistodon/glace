@@ -5,9 +5,9 @@ use std::hash::Hash;
 use crate::Result;
 
 #[cfg(feature = "image")]
-pub use image::RgbaImage;
+use image::RgbaImage;
 
-//#[cfg(feature = "serde")]
+#[cfg(feature = "serde")]
 use serde::Deserialize;
 
 #[cfg(feature = "image")]

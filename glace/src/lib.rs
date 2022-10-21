@@ -1,10 +1,14 @@
 pub use glace_macros::glace;
+
+#[cfg(feature = "image")]
+pub use image;
+
 pub use indexmap;
 
 #[cfg(feature = "self_cached")]
 pub use lazy_static;
 
-//#[cfg(feature = "serde")]
+#[cfg(feature = "serde")]
 pub use serde;
 
 pub mod _internal;
@@ -23,17 +27,15 @@ use thiserror::Error;
 
 use crate::cache::RwCache;
 
-//#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-//#[cfg_attr(feature = "serde", serde(untagged))]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
 pub enum PathedKey<'a> {
     Known(&'a str),
     Path { path: &'a Path },
 }
 
 #[derive(Debug, Error)]
-pub enum AssistError {
+pub enum GlaceError {
     #[error("Path `{0}` is not under the correct parent directory (`{1}`)")]
     MismatchedParent(PathBuf, PathBuf),
 
@@ -56,7 +58,7 @@ pub enum AssistError {
     FromUtf8(#[from] std::string::FromUtf8Error),
 }
 
-pub type Result<T> = std::result::Result<T, AssistError>;
+pub type Result<T> = std::result::Result<T, GlaceError>;
 
 pub trait FileAsset: Sized {
     const PARENT: &'static str;
@@ -233,7 +235,7 @@ pub trait Asset: BytesAsset {
     }
 }
 
-//#[cfg(feature = "serde")]
+#[cfg(feature = "serde")]
 pub trait SerdeAsset: BytesAsset {
     fn deserialize<'b, T: for<'a> serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> Result<T>;
 

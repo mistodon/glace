@@ -13,21 +13,22 @@ license = "CC0-1.0"
 proc-macro = true
 
 [features]
-edres_json = ["edres", "edres/json", "serde_json"]
-edres_toml = ["edres", "edres/toml", "serde_toml"]
-edres_yaml = ["edres", "edres/yaml", "serde_yaml"]
+edres_json = ["edres/json", "serde_json"]
+edres_toml = ["edres/toml", "serde_toml"]
+edres_yaml = ["edres/yaml", "serde_yaml"]
 image = ["dep:image"]
 self_cached = []
-serde_json = ["dep:serde_json"]
-serde_toml = ["dep:toml"]
-serde_yaml = ["dep:serde_yaml"]
+serde = []
+serde_json = ["serde", "dep:serde_json"]
+serde_toml = ["serde", "dep:toml"]
+serde_yaml = ["serde", "dep:serde_yaml"]
 
-#disable_const_data = []
-#disable_disk_io = []
+disable_const_data = []
+disable_disk_io = []
 
 [dependencies]
 convert_case = "0.6"
-edres = { version = "0.6", optional = true, default-features = false }
+edres = { version = "0.6", default-features = false }
 ignore = "0.4"
 image = { version = "0.24", optional = true }
 indexmap = { version = "1.9", features = ["serde"] }

@@ -20,15 +20,14 @@ edres_toml = ["serde_toml", "glace_macros/edres_toml"]
 edres_yaml = ["serde_yaml", "glace_macros/edres_yaml"]
 image = ["dep:image", "glace_macros/image"]
 
-#serde = ["dep:serde"]
-serde = []
+serde = ["dep:serde", "glace_macros/serde"]
 serde_json = ["serde", "dep:serde_json", "glace_macros/serde_json"]
 serde_toml = ["serde", "dep:toml", "glace_macros/serde_toml"]
 serde_yaml = ["serde", "dep:serde_yaml", "glace_macros/serde_yaml"]
 
 self_cached = ["glace_macros/self_cached"]
-#disable_const_data = ["glace_macros/disable_const_data"]
-#disable_disk_io = ["glace_macros/disable_disk_io"]
+disable_const_data = ["glace_macros/disable_const_data"]
+disable_disk_io = ["glace_macros/disable_disk_io"]
 
 visit_includes_skipped = []
 
@@ -39,7 +38,7 @@ indexmap = { version = "1.9", features = ["serde"] }
 image = { version = "0.24", optional = true }
 lazy_static = "1.0"
 parking_lot = "0.12"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", optional = true, features = ["derive"] }
 serde_json = { version = "1.0", optional = true, features = ["preserve_order", "raw_value"] }
 serde_yaml = { version = "0.9", optional = true }
 thiserror = "1.0"

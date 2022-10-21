@@ -1,6 +1,11 @@
+mod codegen;
+mod compat_tests;
+mod parsing;
+
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use color_eyre::eyre::{eyre, Result};
 use convert_case::{Case, Casing};
@@ -15,192 +20,35 @@ use syn::{
     Ident, Token, Type,
 };
 
-#[repr(u32)]
-enum SizeTest {
-    _Just(u32),
-}
+use crate::{
+    codegen::{ident, Context, ModType, StringyTokens},
+    parsing::{GlaceMacro, Property},
+};
 
-#[repr(u32)]
-enum LayoutTest {
-    Zero,
-    One,
-    _Path(u32),
-}
-
-const SIZE_TEST_ERROR: &str = "Your target's `enum` layout is not compatible with this crate. For this proc macro to work correctly, an enum with a u32 discriminant and a u32 field must be the same size as a u64. Your target may be adding padding, or not respecting the #[repr(u32)] attribute.";
-
-const LAYOUT_TEST_ERROR: &str = "Your target's `enum` layout is not compatible with this crate. For this proc macro to work correctly, an enum with a u32 discriminant and a u32 field must be represented with the discriminant filling the lower 32 bits. Additionally, the discriminant must monotonically increase from 0.";
-
-struct AssistMacro {
-    alias: Ident,
-    path: PathBuf,
-    mod_name: String,
-    overrides: HashMap<PathBuf, Vec<OverrideProperty>>,
-}
-
-impl Parse for AssistMacro {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let mut alias = to_ident("glace");
-        if input.parse::<Token![crate]>().is_ok() {
-            alias = to_ident("crate");
-            input.parse::<Token![,]>()?;
-        } else if let Ok(token) = input.parse::<syn::Ident>() {
-            alias = token;
-            input.parse::<Token![,]>()?;
-        }
-        let path = input.parse::<syn::LitStr>()?.value().into();
-        input.parse::<Token![,]>()?;
-        input.parse::<Token![mod]>()?;
-        let mod_name: Ident = input.parse()?;
-        let mod_name = mod_name.to_string();
-
-        let mut overrides = HashMap::new();
-        if input.parse::<Token![where]>().is_ok() {
-            let overs: Punctuated<Override, Token![,]> = Punctuated::parse_terminated(input)?;
-            for o in overs.into_iter() {
-                overrides.insert(o.path, o.properties.into_iter().collect());
-            }
-        }
-
-        Ok(AssistMacro {
-            alias,
-            path,
-            mod_name,
-            overrides,
-        })
-    }
-}
-
-struct Override {
-    path: PathBuf,
-    properties: Punctuated<OverrideProperty, Token![+]>,
-}
-
-impl Parse for Override {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let path = input.parse::<syn::LitStr>()?.value().into();
-        input.parse::<Token![:]>()?;
-        let properties = Punctuated::parse_separated_nonempty(input)?;
-        Ok(Override { path, properties })
-    }
-}
-
-enum OverrideProperty {
-    Single,
-    Virtual,
-    // WithCache,
-    // NoCache,
-    // WithConst,
-    // NoConst,
-    // WithIo,
-    // NoIo,
-    // WithSerde,
-    // NoSerde,
-    // WithEdres,
-    // NoEdres,
-    // Transpose(TransposeType),
-    Serde(Box<Type>),
-}
-
-// enum TransposeType {
-//     Required,
-//     Option,
-//     Default,
-// }
-
-impl Parse for OverrideProperty {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let ident = input.parse::<syn::Ident>()?;
-
-        let value = match ident.to_string().as_str() {
-            "Single" => OverrideProperty::Single,
-            "Virtual" => OverrideProperty::Virtual,
-            // "WithCache" => OverrideProperty::WithCache,
-            // "NoCache" => OverrideProperty::NoCache,
-            // "WithConst" => OverrideProperty::WithConst,
-            // "NoConst" => OverrideProperty::NoConst,
-            // "WithIo" => OverrideProperty::WithIo,
-            // "NoIo" => OverrideProperty::NoIo,
-            // "WithSerde" => OverrideProperty::WithSerde,
-            // "NoSerde" => OverrideProperty::NoSerde,
-            // "WithEdres" => OverrideProperty::WithEdres,
-            // "NoEdres" => OverrideProperty::NoEdres,
-            // "Transpose" => {
-            //     let mut kind = TransposeType::Required;
-            //     if input.parse::<Token![<]>().is_ok() {
-            //         let ident = input.parse::<syn::Ident>()?;
-            //         kind = match ident.to_string().as_str() {
-            //             "Required" => TransposeType::Required,
-            //             "Default" => TransposeType::Default,
-            //             "Option" => TransposeType::Option,
-            //             _ => return Err(Error::new(ident.span(), "Unrecognized transpose type")),
-            //         };
-            //         input.parse::<Token![>]>()?;
-            //     }
-            //     OverrideProperty::Transpose(kind)
-            // }
-            "Serde" => {
-                input.parse::<Token![<]>()?;
-                let r#type = input.parse::<Type>()?;
-                input.parse::<Token![>]>()?;
-                OverrideProperty::Serde(Box::new(r#type))
-            }
-            _ => return Err(Error::new(ident.span(), "Unrecognized override for path")),
-        };
-
-        Ok(value)
-    }
-}
-
-fn to_ident(x: &str) -> Ident {
-    quote::format_ident!("{}", x)
-}
-
-fn generate_toplevel_module(
-    glace: &Ident,
-    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
-    virtuals: HashSet<PathBuf>,
-    singles: HashSet<PathBuf>,
-    path: &Path,
-    mod_name: &str,
-) -> TokenStream2 {
-    let (tokens, _) = generate_modules(glace, overrides, virtuals, singles, path, mod_name, None);
+fn generate_toplevel_module(context: Arc<Context>, path: &Path, mod_name: &str) -> TokenStream2 {
+    let (tokens, _) = generate_modules(context, path, mod_name, None);
     tokens
 }
 
 fn generate_modules(
-    glace: &Ident,
-    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
-    virtuals: HashSet<PathBuf>,
-    singles: HashSet<PathBuf>,
+    context: Arc<Context>,
     path: &Path,
     mod_name: &str,
     parents: Option<TokenStream2>,
 ) -> (TokenStream2, TokenStream2) {
-    if singles.contains(path) {
-        generate_single_module(
-            glace,
-            overrides,
-            virtuals,
-            singles,
-            path,
-            mod_name,
-            parents.unwrap(),
-        )
-        .unwrap()
-    } else if virtuals.contains(path) {
-        generate_virtual_module(
-            glace,
-            overrides,
-            virtuals,
-            singles,
-            path,
-            mod_name,
-            parents.unwrap(),
-        )
-        .unwrap()
-    } else {
-        generate_dir_module(glace, overrides, virtuals, singles, path, mod_name, parents).unwrap()
+    match context
+        .overrides
+        .get(path)
+        .map(|config| config.mod_type)
+        .unwrap_or(ModType::Dir)
+    {
+        ModType::Dir => generate_dir_module(context, path, mod_name, parents).unwrap(),
+        ModType::Single => {
+            generate_single_module(context, path, mod_name, parents.unwrap()).unwrap()
+        }
+        ModType::Virtual => {
+            generate_virtual_module(context, path, mod_name, parents.unwrap()).unwrap()
+        }
     }
 }
 
@@ -279,7 +127,11 @@ impl MainType {
 }
 
 #[allow(unused_variables)]
-fn serde_asset_impl(glace: &Ident, item_name: &Ident, main_type: MainType) -> Option<TokenStream2> {
+fn serde_asset_impl(
+    glace: &StringyTokens,
+    item_name: &Ident,
+    main_type: MainType,
+) -> Option<TokenStream2> {
     match main_type {
         #[cfg(feature = "serde_json")]
         MainType::Json => Some(quote!(
@@ -313,10 +165,10 @@ fn serde_asset_impl(glace: &Ident, item_name: &Ident, main_type: MainType) -> Op
 }
 
 fn asset_impl(
-    glace: &Ident,
+    glace: &StringyTokens,
     item_name: &Ident,
     main_type: MainType,
-    value_type: Option<&Type>,
+    value_type: Option<&StringyTokens>,
 ) -> Option<TokenStream2> {
     let _serde_impl = value_type.map(|ty| {
         quote!(
@@ -334,7 +186,7 @@ fn asset_impl(
         #[cfg(feature = "image")]
         MainType::Image => Some(quote!(
             impl #glace::Asset for #item_name {
-                type Value = #glace::_internal::load::RgbaImage;
+                type Value = #glace::image::RgbaImage;
 
                 fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
                     #glace::_internal::load::load_image(bytes)
@@ -356,7 +208,7 @@ fn asset_impl(
 }
 
 fn cache_and_impl(
-    glace: &Ident,
+    glace: &StringyTokens,
     item_name: &Ident,
     is_asset: bool,
 ) -> (Option<TokenStream2>, Option<TokenStream2>) {
@@ -379,33 +231,16 @@ fn cache_and_impl(
     }
 }
 
-fn override_type<'a>(
-    overrides: &'a HashMap<PathBuf, Vec<OverrideProperty>>,
-    path: &Path,
-) -> Option<&'a Type> {
-    overrides.get(path).and_then(|props| {
-        props
-            .iter()
-            .filter_map(|p| match p {
-                OverrideProperty::Serde(ty) => Some(ty.as_ref()),
-                _ => None,
-            })
-            .next()
-    })
-}
-
 fn generate_dir_module(
-    glace: &Ident,
-    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
-    virtuals: HashSet<PathBuf>,
-    singles: HashSet<PathBuf>,
+    context: Arc<Context>,
     path: &Path,
     mod_name: &str,
     parents: Option<TokenStream2>,
 ) -> Result<(TokenStream2, TokenStream2)> {
+    let glace = &context.alias;
     let enum_str_name = mod_name.to_case(Case::Pascal);
-    let enum_name = to_ident(&enum_str_name);
-    let mod_name = to_ident(mod_name);
+    let enum_name = ident(&enum_str_name);
+    let mod_name = ident(mod_name);
 
     let next_parents = match &parents {
         Some(parents) => quote!(#parents::#mod_name),
@@ -413,10 +248,9 @@ fn generate_dir_module(
     };
     let return_parents = next_parents.clone();
 
-    let virtuals_0 = virtuals.clone();
-    let virtuals_1 = virtuals.clone();
-    let singles_0 = singles.clone();
-    let singles_1 = singles.clone();
+    let dir_context = Arc::clone(&context);
+    let gen_context = Arc::clone(&context);
+    let file_context = Arc::clone(&context);
 
     let (sub_modules, prelude_contents): (Vec<_>, Vec<_>) = ignore::WalkBuilder::new(path)
         .max_depth(Some(1))
@@ -426,8 +260,8 @@ fn generate_dir_module(
                 .file_type()
                 .map(|f| {
                     f.is_dir()
-                        || virtuals_0.contains(entry.path())
-                        || singles_0.contains(entry.path())
+                        || dir_context.is_single(entry.path())
+                        || dir_context.is_virtual(entry.path())
                 })
                 .unwrap_or(false)
         })
@@ -443,10 +277,7 @@ fn generate_dir_module(
                 .unwrap()
                 .to_case(Case::Snake);
             generate_modules(
-                glace,
-                overrides,
-                virtuals_1.clone(),
-                singles_1.clone(),
+                Arc::clone(&gen_context),
                 &path,
                 &mod_name,
                 Some(next_parents.clone()),
@@ -467,8 +298,8 @@ fn generate_dir_module(
                 .unwrap_or(false);
             is_file
                 && !skipped
-                && !virtuals.contains(entry.path())
-                && !singles.contains(entry.path())
+                && !file_context.is_single(entry.path())
+                && !file_context.is_virtual(entry.path())
         })
         .build()
         .skip(1)
@@ -488,7 +319,7 @@ fn generate_dir_module(
         .collect::<Vec<_>>();
     let variant_names = variant_str_names
         .iter()
-        .map(|s| to_ident(s))
+        .map(|s| ident(s))
         .collect::<Vec<_>>();
     let variant_names = &variant_names;
 
@@ -521,13 +352,13 @@ fn generate_dir_module(
                     quote!(Cow::Owned(#glace::_internal::fetch_string(_index)?)),
                 ],
                 false => [
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
                     quote!(Ok(match previous_modified {
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
                 ],
             };
 
@@ -563,15 +394,15 @@ fn generate_dir_module(
     let main_type = MainType::of(&files).asset_type();
     let serde_asset_impl = serde_asset_impl(glace, &enum_name, main_type);
 
-    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
-        let overridden = override_type(overrides, path);
+    let (specific_type, edres_tokens): (Option<StringyTokens>, Option<TokenStream2>) = {
+        let overridden = context.explicit_type(path);
         if overridden.is_some() {
-            (overridden.map(Cow::Borrowed), None)
+            (overridden, None)
         } else {
             #[cfg(any(feature = "edres_json", feature = "edres_toml", feature = "edres_yaml"))]
             {
                 let value_str_name = format!("{}Value", enum_str_name);
-                let value_name = to_ident(&value_str_name);
+                let value_name = ident(&value_str_name);
                 let format: Option<edres::Format> = match main_type {
                     #[cfg(feature = "edres_json")]
                     MainType::Json => Some(edres::Format::Json),
@@ -612,7 +443,7 @@ fn generate_dir_module(
                     )))]
                     let tokens = None;
 
-                    let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+                    let specific_type = StringyTokens::from(Type::Verbatim(quote!(#value_name)));
 
                     (Some(specific_type), tokens)
                 } else {
@@ -629,7 +460,7 @@ fn generate_dir_module(
             }
         }
     };
-    let specific_type: Option<&Type> = specific_type.as_deref();
+    let specific_type: Option<&StringyTokens> = specific_type.as_ref();
     let edres_attrs = edres_tokens
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
@@ -810,17 +641,15 @@ fn generate_dir_module(
 }
 
 fn generate_virtual_module(
-    glace: &Ident,
-    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
-    _virtuals: HashSet<PathBuf>,
-    _singles: HashSet<PathBuf>,
+    context: Arc<Context>,
     path: &Path,
     mod_name: &str,
     parents: TokenStream2,
 ) -> Result<(TokenStream2, TokenStream2)> {
+    let glace = &context.alias;
     let enum_str_name = mod_name.to_case(Case::Pascal);
-    let enum_name = to_ident(&enum_str_name);
-    let mod_name = to_ident(mod_name);
+    let enum_name = ident(&enum_str_name);
+    let mod_name = ident(mod_name);
     let dir_path = path.to_string_lossy();
 
     let main_type = MainType::of(&[path]);
@@ -854,7 +683,7 @@ fn generate_virtual_module(
         _ => Err(eyre!("Need at least one serde feature enabled"))?,
     };
 
-    let variant_names = data.keys().map(|k| to_ident(k)).collect::<Vec<_>>();
+    let variant_names = data.keys().map(|k| ident(k)).collect::<Vec<_>>();
     let variant_str_names = data.keys().collect::<Vec<_>>();
     let variant_names = &variant_names;
 
@@ -945,13 +774,13 @@ fn generate_virtual_module(
                     }),
                 ],
                 false => [
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
                     quote!(Ok(match previous_modified {
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
                 ],
             };
 
@@ -984,16 +813,16 @@ fn generate_virtual_module(
         )
     });
 
-    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
-        let overridden = override_type(overrides, path);
+    let (specific_type, edres_tokens): (Option<StringyTokens>, Option<TokenStream2>) = {
+        let overridden = context.explicit_type(path);
         if overridden.is_some() {
-            (overridden.map(Cow::Borrowed), None)
+            (overridden, None)
         } else {
             #[cfg(any(feature = "edres_json", feature = "edres_toml", feature = "edres_yaml"))]
             {
                 let source = std::fs::read_to_string(path)?;
                 let value_str_name = format!("{}Value", enum_str_name);
-                let value_name = to_ident(&value_str_name);
+                let value_name = ident(&value_str_name);
                 let value = match main_type {
                     #[cfg(feature = "edres_json")]
                     MainType::Json => {
@@ -1038,7 +867,7 @@ fn generate_virtual_module(
                 )))]
                 let tokens = None;
 
-                let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+                let specific_type = StringyTokens::from(Type::Verbatim(quote!(#value_name)));
 
                 (Some(specific_type), tokens)
             }
@@ -1053,7 +882,7 @@ fn generate_virtual_module(
             }
         }
     };
-    let specific_type: Option<&Type> = specific_type.as_deref();
+    let specific_type: Option<&StringyTokens> = specific_type.as_ref();
     let edres_attrs = edres_tokens
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
@@ -1171,17 +1000,15 @@ fn generate_virtual_module(
 
 #[allow(unused_variables)]
 fn generate_single_module(
-    glace: &Ident,
-    overrides: &HashMap<PathBuf, Vec<OverrideProperty>>,
-    _virtuals: HashSet<PathBuf>,
-    _singles: HashSet<PathBuf>,
+    context: Arc<Context>,
     path: &Path,
     mod_name: &str,
     parents: TokenStream2,
 ) -> Result<(TokenStream2, TokenStream2)> {
+    let glace = &context.alias;
     let struct_str_name = mod_name.to_case(Case::Pascal);
-    let struct_name = to_ident(&struct_str_name);
-    let mod_name = to_ident(mod_name);
+    let struct_name = ident(&struct_str_name);
+    let mod_name = ident(mod_name);
     let file_path = path.to_string_lossy();
 
     let main_type = MainType::of(&[path]);
@@ -1233,7 +1060,7 @@ fn generate_single_module(
                         None => Some((self.try_bytes()?.into_owned(), SystemTime::UNIX_EPOCH)),
                         _ => None,
                     })),
-                    quote!(Err(#glace::AssistError::DiskIoDisabled)?),
+                    quote!(Err(#glace::GlaceError::DiskIoDisabled)?),
                 ],
             };
 
@@ -1260,14 +1087,14 @@ fn generate_single_module(
         )
     });
 
-    let (specific_type, edres_tokens): (Option<Cow<Type>>, Option<TokenStream2>) = {
-        let overridden = override_type(overrides, path);
+    let (specific_type, edres_tokens): (Option<StringyTokens>, Option<TokenStream2>) = {
+        let overridden = context.explicit_type(path);
         if overridden.is_some() {
-            (overridden.map(Cow::Borrowed), None)
+            (overridden, None)
         } else {
             let source = std::fs::read_to_string(path)?;
             let value_str_name = format!("{}Value", struct_str_name);
-            let value_name = to_ident(&value_str_name);
+            let value_name = ident(&value_str_name);
             let value = match main_type {
                 #[cfg(feature = "edres_json")]
                 MainType::Json => {
@@ -1309,12 +1136,12 @@ fn generate_single_module(
             )))]
             let tokens = None;
 
-            let specific_type = Cow::Owned(Type::Verbatim(quote!(#value_name)));
+            let specific_type = StringyTokens::from(Type::Verbatim(quote!(#value_name)));
 
             (Some(specific_type), tokens)
         }
     };
-    let specific_type: Option<&Type> = specific_type.as_deref();
+    let specific_type: Option<&StringyTokens> = specific_type.as_ref();
     let edres_attrs = edres_tokens
         .is_some()
         .then(|| quote!(#![allow(clippy::derive_partial_eq_without_eq)]));
@@ -1373,75 +1200,29 @@ fn generate_single_module(
 
 #[proc_macro]
 pub fn glace(stream: TokenStream) -> TokenStream {
+    use crate::compat_tests::*;
+    use std::mem::transmute;
+
     let crate_dir = std::env::var_os("CARGO_MANIFEST_DIR");
     if let Some(path) = crate_dir {
         std::env::set_current_dir(path).unwrap();
     }
 
-    use std::mem::{size_of, transmute};
-
-    {
-        assert_eq!(size_of::<SizeTest>(), 8, "{}", SIZE_TEST_ERROR);
-
-        assert_eq!(
-            0x00000000ffffffff & unsafe { transmute::<_, u64>(LayoutTest::Zero) },
-            0,
-            "incompatible discriminant representation: {}",
-            LAYOUT_TEST_ERROR
-        );
-        assert_eq!(
-            0x00000000ffffffff & unsafe { transmute::<_, u64>(LayoutTest::One) },
-            1,
-            "incompatible discriminant representation: {}",
-            LAYOUT_TEST_ERROR
-        );
-        assert_eq!(
-            0x00000000ffffffff & unsafe { transmute::<_, u64>(LayoutTest::_Path(123)) },
-            2,
-            "incompatible discriminant representation: {}",
-            LAYOUT_TEST_ERROR
-        );
-        assert_eq!(
-            unsafe { transmute::<_, u64>(LayoutTest::_Path(123)) } >> 32,
-            123,
-            "incompatible field representation: {}",
-            LAYOUT_TEST_ERROR
-        );
+    unsafe {
+        size_test::<SizeTest>();
+        discriminant_test(transmute(LayoutTest::Zero), 0);
+        discriminant_test(transmute(LayoutTest::One), 1);
+        discriminant_test(transmute(LayoutTest::Other(123)), 2);
+        field_test(transmute(LayoutTest::Other(123)), 123);
     }
 
-    let call: AssistMacro = parse_macro_input!(stream as AssistMacro);
-
-    let virtuals = call
-        .overrides
-        .iter()
-        .filter(|entry| {
-            entry
-                .1
-                .iter()
-                .any(|prop| matches!(prop, OverrideProperty::Virtual))
-        })
-        .map(|entry| entry.0.clone())
-        .collect::<HashSet<_>>();
-
-    let singles = call
-        .overrides
-        .iter()
-        .filter(|entry| {
-            entry
-                .1
-                .iter()
-                .any(|prop| matches!(prop, OverrideProperty::Single))
-        })
-        .map(|entry| entry.0.clone())
-        .collect::<HashSet<_>>();
+    let call: GlaceMacro = parse_macro_input!(stream as GlaceMacro);
+    let context = Arc::new(Context::from(call));
 
     generate_toplevel_module(
-        &call.alias,
-        &call.overrides,
-        virtuals,
-        singles,
-        &call.path,
-        &call.mod_name,
+        Arc::clone(&context),
+        &context.root_path,
+        &context.root_mod_name,
     )
     .into()
 }

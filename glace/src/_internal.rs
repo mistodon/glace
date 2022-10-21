@@ -5,7 +5,7 @@ use std::{
     time::SystemTime,
 };
 
-use crate::{AssistError, Result};
+use crate::{GlaceError, Result};
 use parking_lot::RwLock;
 
 lazy_static::lazy_static! {
@@ -35,7 +35,7 @@ impl PathCache {
         if backing_index < self.paths.len() {
             Ok(&self.paths[backing_index])
         } else {
-            Err(AssistError::NoPathCached(index))
+            Err(GlaceError::NoPathCached(index))
         }
     }
 
@@ -66,7 +66,7 @@ impl NameCache {
         if backing_index < self.names.len() {
             Ok(&self.names[backing_index])
         } else {
-            Err(AssistError::NoNameCached(index))
+            Err(GlaceError::NoNameCached(index))
         }
     }
 
@@ -167,7 +167,7 @@ pub fn fetch_bytes_modified(
 
 pub fn verify_parent(child: &Path, parent: &Path) -> Result<()> {
     if !child.starts_with(parent) {
-        Err(AssistError::MismatchedParent(
+        Err(GlaceError::MismatchedParent(
             child.to_owned(),
             parent.to_owned(),
         ))

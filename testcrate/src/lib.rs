@@ -209,7 +209,7 @@ mod tests {
     fn image_impl() {
         use glace::Asset;
 
-        let _img: glace::_internal::load::RgbaImage = Sprites::Happy.value();
+        let _img: glace::image::RgbaImage = Sprites::Happy.value();
     }
 
     #[test]

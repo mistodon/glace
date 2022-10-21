@@ -22,3 +22,25 @@
 - [ ] Path-to `dyn BytesAsset` that can be downcast
 - [ ] Directory layers (mods etc.)
 - [ ] Optional `notify` thread for reloading self_caches
+
+New syntax:
+```rust
+glace!{
+    #[path = "path/to/assets"]
+    pub mod my_asset_module_name { // Any visibility specifier ok
+        use whatever::path as glace; // Optional
+
+        "my_file_to_override.txt": Single,
+        "my_dir_to_override": Serde<MyType>,
+    }
+}
+```
+
+Some other ideas:
+- For overrides:
+    - `ModName<my_module_name>`
+    - `Ignore`
+    - `NoRecurse`
+    - `Image` / `Raw` etc. (to give an Asset type, or ignore one)
+    - `PreludeIgnore` don't include it in the prelude module
+- Implement Asset<Cow<[u8]>> or Asset<Cow<str>> for assets without another implementation.
