@@ -2,8 +2,19 @@
 
 set -eux
 
-cargo check
-cargo test
-cargo fmt -- --check
-cargo clippy -- -D clippy::all
-cargo build
+function testcrate() {
+    local dir=$1
+    (cd $dir && \
+        cargo check && \
+        cargo test && \
+        cargo fmt -- --check && \
+        cargo clippy -- -D clippy::all)
+}
+
+testcrate glace
+(cd glace && cargo build)
+
+readonly testcrates=$(ls test_suite)
+for dir in $testcrates; do
+    testcrate test_suite/$dir
+done

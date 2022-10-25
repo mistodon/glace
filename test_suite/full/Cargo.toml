@@ -1,0 +1,8 @@
+[package]
+name = "full"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glace = { path = "../../glace/glace", default-features = false, features = [ "full", "visit_includes_skipped" ] }
+serde = { version = "1.0", features = ["derive"] }

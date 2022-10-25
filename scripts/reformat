@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -eux
+set -o pipefail
+
+function reformat() {
+    local dir=$1
+    (cd $dir && cargo fmt)
+}
+
+reformat glace
+
+readonly testcrates=$(ls test_suite)
+for dir in $testcrates; do
+    reformat test_suite/$dir
+done

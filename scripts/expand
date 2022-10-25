@@ -3,4 +3,4 @@
 set -eu
 set -o pipefail
 
-(cd testcrate && cargo +nightly expand --lib)
+(cd glace/testcrate && cargo +nightly expand --lib)

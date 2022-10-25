@@ -25,7 +25,7 @@ use std::{
 use indexmap::IndexMap;
 use thiserror::Error;
 
-use crate::cache::RwCache;
+use crate::cache::Cache;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
@@ -189,7 +189,7 @@ pub trait StrAsset: BytesAsset {
 pub trait Asset: BytesAsset {
     type Value;
 
-    fn load(bytes: Cow<[u8]>) -> Result<Self::Value>;
+    fn load(bytes: Cow<'static, [u8]>) -> Result<Self::Value>;
 
     fn try_value(&self) -> Result<Self::Value> {
         let bytes = self.try_bytes()?;
@@ -289,7 +289,9 @@ pub trait CachedAsset: Asset
 where
     Self: 'static + Clone + Eq + Hash,
 {
-    fn cache() -> &'static RwCache<Self, Self::Value>;
+    type CacheType: Cache<Self, Self::Value>;
+
+    fn cache() -> &'static Self::CacheType;
 
     fn cached(&self) -> Arc<Self::Value> {
         Self::cache().get(self)
@@ -311,7 +313,12 @@ where
 #[cfg(doc)]
 mod example_wrapper {
     use crate::glace;
-    glace!(crate, "example_assets", mod _docs_only_example_assets);
+    glace! {
+        #[path = "example_assets"]
+        pub mod _docs_only_example_assets {
+            use crate as glace;
+        }
+    }
 }
 
 #[cfg(doc)]

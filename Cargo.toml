@@ -1,7 +1,0 @@
-[workspace]
-
-members = [
-    "glace",
-    "glace_macros",
-    "testcrate",
-]

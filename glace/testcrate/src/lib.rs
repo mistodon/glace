@@ -1,3 +1,5 @@
+pub use glace; // Only exported to test aliasing
+
 use glace::serde;
 
 #[derive(Debug, PartialEq, Eq, serde::Deserialize)]
@@ -18,15 +20,19 @@ pub struct Config {
     pub description: String,
 }
 
-glace::glace! {"assets", mod assets
-where
-    "assets/autoconfig.toml": Single,
-    "assets/autoitems.yaml": Virtual,
+glace::glace! {
+    #[path = "assets"]
+    pub mod assets {
+        use crate::glace as glace; // Only included to test aliasing
 
-    "assets/config.toml": Single + Serde<Config>,
-    "assets/items.yaml": Virtual + Serde<ItemData>,
-    "assets/profiles": Serde<Profile>,
-    // "assets/languages": Transpose,
+        "assets/autoconfig.toml": Single,
+        "assets/autoitems.yaml": Virtual,
+
+        "assets/config.toml": Single + Serde<Config>,
+        "assets/items.yaml": Virtual + Serde<ItemData>,
+        "assets/profiles": Serde<Profile>,
+        // "assets/languages": Transpose,
+    }
 }
 
 #[cfg(test)]

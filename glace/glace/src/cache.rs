@@ -6,6 +6,14 @@ use crate::Asset;
 
 type Entry<V> = (Arc<V>, Option<SystemTime>);
 
+pub trait Cache<K, V> {
+    fn get(&self, key: &K) -> Arc<V>;
+    fn get_updated(&self, key: &K) -> Arc<V>;
+    fn reload(&self, key: &K) -> Arc<V>;
+    fn remove(&self, key: &K);
+    fn clear(&self);
+}
+
 #[derive(Default)]
 pub struct RwCache<K, V>
 where
@@ -23,8 +31,13 @@ where
             backing: Default::default(),
         }
     }
+}
 
-    pub fn get(&self, key: &K) -> Arc<V> {
+impl<K, V> Cache<K, V> for RwCache<K, V>
+where
+    K: Asset<Value = V> + Clone + Eq + Hash,
+{
+    fn get(&self, key: &K) -> Arc<V> {
         {
             let cache = self.backing.read();
             if let Some((result, _time)) = cache.get(key) {
@@ -39,7 +52,7 @@ where
         data
     }
 
-    pub fn get_updated(&self, key: &K) -> Arc<V> {
+    fn get_updated(&self, key: &K) -> Arc<V> {
         let previous_entry = {
             let cache = self.backing.read();
             cache.get(key).map(|(data, time)| (Arc::clone(data), *time))
@@ -61,7 +74,7 @@ where
         }
     }
 
-    pub fn reload(&self, key: &K) -> Arc<V> {
+    fn reload(&self, key: &K) -> Arc<V> {
         let data = Arc::new(key.value());
         {
             let mut cache = self.backing.write();
@@ -70,12 +83,12 @@ where
         data
     }
 
-    pub fn remove(&self, key: &K) {
+    fn remove(&self, key: &K) {
         let mut cache = self.backing.write();
         cache.remove(key);
     }
 
-    pub fn clear(&self) {
+    fn clear(&self) {
         let mut cache = self.backing.write();
         cache.clear();
     }
