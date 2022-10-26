@@ -25,13 +25,14 @@ glace::glace! {
     pub mod assets {
         use crate::glace as glace; // Only included to test aliasing
 
-        "assets/autoconfig.toml": Single,
-        "assets/autoitems.yaml": Virtual,
+        "autoconfig.toml": Single,
+        "autoitems.yaml": Virtual,
 
-        "assets/config.toml": Single + Serde<Config>,
-        "assets/items.yaml": Virtual + Serde<ItemData>,
-        "assets/profiles": Serde<Profile>,
-        // "assets/languages": Transpose,
+        "config.toml": Single + Serde<Config>,
+        "items.yaml": Virtual + Serde<ItemData>,
+        "profiles": Serde<Profile>,
+
+        // "languages": Transpose,
     }
 }
 
@@ -115,19 +116,19 @@ mod tests {
     #[test]
     fn from_path_functions_correctly() {
         assert_eq!(
-            Notes::from_const_path("assets/text/notes/note1.txt".as_ref()),
+            Notes::from_const_path("assets/text/notes/note1.txt"),
             Some(Notes::Note1)
         );
         assert_eq!(
-            Notes::from_path("assets/text/notes/note1.txt".as_ref()),
+            Notes::from_path("assets/text/notes/note1.txt"),
             Notes::Note1
         );
         assert_eq!(
-            Notes::from_path("assets/text/notes/_a_secret_note.txt".as_ref()),
+            Notes::from_path("assets/text/notes/_a_secret_note.txt"),
             Notes::_Path(0)
         );
         assert_eq!(
-            Notes::from_path("assets/text/notes/_another_secret_note.txt".as_ref()),
+            Notes::from_path("assets/text/notes/_another_secret_note.txt"),
             Notes::_Path(1)
         );
     }

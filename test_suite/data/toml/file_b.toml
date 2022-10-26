@@ -1,0 +1,6 @@
+desc = "TOML B"
+number = 2
+array = [1, 2, 3]
+
+[map]
+desc = "Nested in TOML B"

@@ -1,49 +1,27 @@
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsStr,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 
 use color_eyre::eyre::{eyre, Result};
 use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{Ident, Type};
+use quote::quote;
+use syn::Ident;
 
-use crate::parsing::{GlaceMacro, ParseType, Property};
+use crate::config::{AssetType, Config, Context, FileType, ModType, StringyTokens};
 
-#[derive(Debug, Clone)]
-pub struct StringyTokens(String);
-
-impl From<&Ident> for StringyTokens {
-    fn from(i: &Ident) -> StringyTokens {
-        StringyTokens(quote!(#i).to_string())
+fn docs(_tokens: TokenStream) -> Option<TokenStream> {
+    #[cfg(feature = "example_documentation")]
+    {
+        Some(_tokens)
     }
-}
 
-impl From<&Type> for StringyTokens {
-    fn from(t: &Type) -> StringyTokens {
-        StringyTokens(quote!(#t).to_string())
-    }
-}
-
-impl From<&syn::Path> for StringyTokens {
-    fn from(t: &syn::Path) -> StringyTokens {
-        StringyTokens(quote!(#t).to_string())
-    }
-}
-
-impl From<&syn::Visibility> for StringyTokens {
-    fn from(t: &syn::Visibility) -> StringyTokens {
-        StringyTokens(quote!(#t).to_string())
-    }
-}
-
-impl ToTokens for StringyTokens {
-    fn to_tokens(&self, stream: &mut TokenStream) {
-        let token_stream: TokenStream = self.0.parse().unwrap();
-        token_stream.to_tokens(stream);
+    #[cfg(not(feature = "example_documentation"))]
+    {
+        None
     }
 }
 
@@ -59,303 +37,146 @@ pub fn item_name(x: &str) -> String {
     x.to_case(Case::Pascal)
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ModType {
-    Dir,
-
-    Ignore,
-
-    #[cfg(feature = "serde")]
-    Single,
-
-    #[cfg(feature = "serde")]
-    Virtual,
+struct ModSpec {
+    path: PathBuf,
+    name: String,
+    config: Config,
+    dependencies: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum FileType {
-    #[cfg(feature = "image")]
-    Image,
-
-    #[cfg(feature = "serde_json")]
-    Json,
-
-    #[cfg(feature = "serde_toml")]
-    Toml,
-
-    #[cfg(feature = "serde_yaml")]
-    Yaml,
-
-    Raw,
+struct BuiltMod {
+    _path: PathBuf,
+    tokens: TokenStream,
+    includes: TokenStream,
 }
 
-#[derive(Debug, Clone)]
-pub enum AssetType {
-    #[cfg(feature = "image")]
-    Image,
+fn serde_asset_impl(
+    _glace: &StringyTokens,
+    _item_name: &Ident,
+    file_type: FileType,
+    config: &Config,
+) -> Option<TokenStream> {
+    match file_type {
+        _ if !config.impl_serde => None,
 
-    #[cfg(feature = "serde")]
-    Serde(StringyTokens),
-
-    #[cfg(feature = "edres")]
-    EdresGenerated,
-
-    String,
-    Binary,
-
-    None,
-}
-
-#[derive(Clone)]
-pub struct Config {
-    pub const_data: bool,
-    pub disk_io: bool,
-    pub self_cached: bool,
-    pub impl_serde: bool,
-    pub allow_edres: bool,
-    pub mod_type: ModType,
-    pub explicit_file_type: Option<FileType>,
-    pub explicit_asset_type: Option<AssetType>,
-}
-
-impl Config {
-    fn _match_ext(files: &[impl AsRef<Path>], exts: &[&str]) -> bool {
-        !files.is_empty()
-            && files.iter().all(|path| {
-                exts.iter()
-                    .any(|ext| Some(ext.as_ref()) == path.as_ref().extension())
-            })
-    }
-
-    pub fn file_type<P: AsRef<Path>>(&self, _paths: &[P]) -> FileType {
-        self.explicit_file_type.unwrap_or_else(|| {
-            #[cfg(feature = "image")]
-            {
-                if !_paths.is_empty()
-                    && _paths
-                        .iter()
-                        .all(|p| image::ImageFormat::from_path(p).is_ok())
-                {
-                    return FileType::Image;
+        #[cfg(feature = "serde_json")]
+        FileType::Json => Some(quote!(
+            impl #_glace::SerdeAsset for #_item_name {
+                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
+                    #_glace::_internal::load::load_json(bytes)
                 }
             }
-            #[cfg(feature = "serde_json")]
-            {
-                if Self::_match_ext(_paths, &["json"]) {
-                    return FileType::Json;
+        )),
+
+        #[cfg(feature = "serde_toml")]
+        FileType::Toml => Some(quote!(
+            impl #_glace::SerdeAsset for #_item_name {
+                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
+                    #_glace::_internal::load::load_toml(bytes)
                 }
             }
-            #[cfg(feature = "serde_toml")]
-            {
-                if Self::_match_ext(_paths, &["toml"]) {
-                    return FileType::Toml;
+        )),
+
+        #[cfg(feature = "serde_yaml")]
+        FileType::Yaml => Some(quote!(
+            impl #_glace::SerdeAsset for #_item_name {
+                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
+                    #_glace::_internal::load::load_yaml(bytes)
                 }
             }
-            #[cfg(feature = "serde_yaml")]
-            {
-                if Self::_match_ext(_paths, &["yaml", "yml"]) {
-                    return FileType::Yaml;
-                }
-            }
-            FileType::Raw
-        })
-    }
+        )),
 
-    pub fn asset_type(&self, file_type: FileType) -> AssetType {
-        self.explicit_asset_type.clone().unwrap_or(match file_type {
-            #[cfg(feature = "image")]
-            FileType::Image => AssetType::Image,
-
-            #[cfg(feature = "edres_json")]
-            FileType::Json if self.allow_edres => AssetType::EdresGenerated,
-
-            #[cfg(feature = "edres_toml")]
-            FileType::Toml if self.allow_edres => AssetType::EdresGenerated,
-
-            #[cfg(feature = "edres_yaml")]
-            FileType::Yaml if self.allow_edres => AssetType::EdresGenerated,
-
-            _ => AssetType::Binary,
-        })
+        _ => None,
     }
 }
 
-pub struct Context {
-    pub alias: StringyTokens,
-    pub root_visibility: Option<StringyTokens>,
-    pub root_path: PathBuf,
-    pub root_mod_name: String,
-    pub const_data: bool,
-    pub disk_io: bool,
-    pub self_cached: bool,
-    pub impl_serde: bool,
-    pub allow_edres: bool,
-    pub overrides: HashMap<PathBuf, Config>,
-}
-
-impl Context {
-    pub fn config(&self, path: &Path) -> Config {
-        self.overrides.get(path).cloned().unwrap_or(Config {
-            const_data: self.const_data,
-            disk_io: self.disk_io,
-            self_cached: self.self_cached,
-            impl_serde: self.impl_serde,
-            allow_edres: self.allow_edres,
-            mod_type: ModType::Dir,
-            explicit_file_type: None,
-            explicit_asset_type: None,
-        })
+fn asset_impl(
+    glace: &StringyTokens,
+    item_name: &Ident,
+    asset_type: AssetType,
+    config: &Config,
+) -> Option<TokenStream> {
+    if !(config.disk_io || config.const_data) {
+        return None;
     }
 
-    pub fn is_normal(&self, path: &Path) -> bool {
-        self.overrides.get(path).is_none()
-    }
+    match asset_type {
+        #[cfg(feature = "image")]
+        AssetType::Image => Some(quote!(
+            impl #glace::Asset for #item_name {
+                type Value = #glace::image::RgbaImage;
 
-    pub fn is_ignored(&self, path: &Path) -> bool {
-        self.overrides
-            .get(path)
-            .map(|config| matches!(config.mod_type, ModType::Ignore))
-            .unwrap_or(false)
-    }
+                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
+                    #glace::_internal::load::load_image(bytes)
+                }
+            }
+        )),
 
-    pub fn is_single(&self, _path: &Path) -> bool {
         #[cfg(feature = "serde")]
-        {
-            self.overrides
-                .get(_path)
-                .map(|config| matches!(config.mod_type, ModType::Single))
-                .unwrap_or(false)
-        }
+        AssetType::Serde(ty) if config.impl_serde => Some(quote!(
+            impl #glace::Asset for #item_name {
+                type Value = #ty;
 
-        #[cfg(not(feature = "serde"))]
-        {
-            false
-        }
-    }
+                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
+                    <Self as #glace::SerdeAsset>::deserialize(bytes)
+                }
+            }
+        )),
 
-    pub fn is_virtual(&self, _path: &Path) -> bool {
-        #[cfg(feature = "serde")]
-        {
-            self.overrides
-                .get(_path)
-                .map(|config| matches!(config.mod_type, ModType::Virtual))
-                .unwrap_or(false)
-        }
+        #[cfg(feature = "edres")]
+        AssetType::EdresGenerated => unreachable!("Type should have been generated already"),
 
-        #[cfg(not(feature = "serde"))]
-        {
-            false
-        }
-    }
-}
+        AssetType::String => Some(quote!(
+            impl #glace::Asset for #item_name {
+                type Value = Cow<'static, str>;
 
-impl From<GlaceMacro> for Context {
-    fn from(call: GlaceMacro) -> Context {
-        let const_data = cfg!(feature = "const_data");
-        let disk_io = cfg!(feature = "disk_io");
-        let self_cached = cfg!(feature = "self_cached");
-        let impl_serde = cfg!(feature = "serde");
-        let allow_edres = cfg!(feature = "edres");
-
-        let mut overrides = HashMap::new();
-
-        for (path, props) in call.overrides.into_iter() {
-            let mut config = Config {
-                const_data,
-                disk_io,
-                self_cached,
-                impl_serde,
-                allow_edres,
-                mod_type: ModType::Dir,
-                explicit_file_type: None,
-                explicit_asset_type: None,
-            };
-
-            for prop in props {
-                match prop {
-                    Property::WithCache => config.self_cached = true,
-                    Property::NoCache => config.self_cached = false,
-                    Property::WithConst => config.const_data = true,
-                    Property::NoConst => config.const_data = false,
-                    Property::WithIO => config.disk_io = true,
-                    Property::NoIO => config.disk_io = false,
-
-                    Property::Ignore => config.mod_type = ModType::Ignore,
-
-                    #[cfg(feature = "serde")]
-                    Property::Single => config.mod_type = ModType::Single,
-
-                    #[cfg(feature = "serde")]
-                    Property::Virtual => config.mod_type = ModType::Virtual,
-
-                    #[cfg(feature = "serde")]
-                    Property::WithSerde => config.impl_serde = true,
-
-                    #[cfg(feature = "serde")]
-                    Property::NoSerde => config.impl_serde = false,
-
-                    #[cfg(feature = "edres")]
-                    Property::WithEdres => config.allow_edres = true,
-
-                    #[cfg(feature = "edres")]
-                    Property::NoEdres => config.allow_edres = false,
-
-                    Property::Type(ty) => match ty {
-                        #[cfg(feature = "image")]
-                        ParseType::Image => {
-                            config.explicit_file_type = Some(FileType::Image);
-                            config.explicit_asset_type = Some(AssetType::Image);
-                        }
-
-                        #[cfg(feature = "serde_json")]
-                        ParseType::Json => config.explicit_file_type = Some(FileType::Json),
-
-                        #[cfg(feature = "serde_toml")]
-                        ParseType::Toml => config.explicit_file_type = Some(FileType::Toml),
-
-                        #[cfg(feature = "serde_yaml")]
-                        ParseType::Yaml => config.explicit_file_type = Some(FileType::Yaml),
-
-                        ParseType::String => {
-                            config.explicit_file_type = Some(FileType::Raw);
-                            config.explicit_asset_type = Some(AssetType::String);
-                        }
-                        ParseType::Binary => {
-                            config.explicit_file_type = Some(FileType::Raw);
-                            config.explicit_asset_type = Some(AssetType::Binary);
-                        }
-                        ParseType::None => {
-                            config.explicit_asset_type = Some(AssetType::None);
-                        }
-                    },
-
-                    #[cfg(feature = "serde")]
-                    Property::Serde(ty) => {
-                        config.explicit_asset_type =
-                            Some(AssetType::Serde(StringyTokens::from(&*ty)))
+                fn load(bytes: Cow<'static, [u8]>) -> #glace::Result<Self::Value> {
+                    match bytes {
+                        Cow::Owned(bytes) => Cow::Owned(String::from_utf8(bytes)?),
+                        Cow::Borrowed(bytes) => Cow::Borrowed(std::str::from_utf8(bytes)?),
                     }
                 }
             }
+        )),
 
-            overrides.insert(path, config);
-        }
+        AssetType::None => None,
 
-        Context {
-            alias: call
-                .alias
-                .as_ref()
-                .map(StringyTokens::from)
-                .unwrap_or_else(|| StringyTokens::from(&ident("glace"))),
-            root_visibility: call.visibility.as_ref().map(StringyTokens::from),
-            root_path: call.path,
-            root_mod_name: call.mod_name,
-            const_data,
-            disk_io,
-            self_cached,
-            impl_serde,
-            allow_edres,
-            overrides,
-        }
+        _ => Some(quote!(
+            impl #glace::Asset for #item_name {
+                type Value = Cow<'static, [u8]>;
+
+                fn load(bytes: Cow<'static, [u8]>) -> #glace::Result<Self::Value> {
+                    Ok(bytes)
+                }
+            }
+        )),
+    }
+}
+
+fn cache_and_impl(
+    glace: &StringyTokens,
+    item_name: &Ident,
+    is_asset: bool,
+    config: &Config,
+) -> (Option<TokenStream>, Option<TokenStream>) {
+    if config.self_cached && is_asset {
+        let self_cache = quote!(
+            #glace::lazy_static::lazy_static! {
+                pub static ref CACHE: #glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value> = #glace::cache::RwCache::new();
+            }
+        );
+        let cached_impl = quote!(
+            impl #glace::CachedAsset for #item_name {
+                type CacheType = #glace::cache::RwCache<Self, Self::Value>;
+
+                fn cache() -> &'static Self::CacheType {
+                    &CACHE
+                }
+            }
+        );
+        (Some(self_cache), Some(cached_impl))
+    } else {
+        (None, None)
     }
 }
 
@@ -435,145 +256,6 @@ pub fn generate_all_modules(context: Arc<Context>) -> Result<TokenStream> {
     Ok(built.remove(&context.root_path).unwrap().tokens)
 }
 
-struct ModSpec {
-    path: PathBuf,
-    name: String,
-    config: Config,
-    dependencies: Vec<PathBuf>,
-}
-
-struct BuiltMod {
-    _path: PathBuf,
-    tokens: TokenStream,
-    includes: TokenStream,
-}
-
-fn serde_asset_impl(
-    _glace: &StringyTokens,
-    _item_name: &Ident,
-    file_type: FileType,
-    config: &Config,
-) -> Option<TokenStream> {
-    match file_type {
-        _ if !config.impl_serde => None,
-
-        #[cfg(feature = "serde_json")]
-        FileType::Json => Some(quote!(
-            impl #_glace::SerdeAsset for #_item_name {
-                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
-                    #_glace::_internal::load::load_json(bytes)
-                }
-            }
-        )),
-
-        #[cfg(feature = "serde_toml")]
-        FileType::Toml => Some(quote!(
-            impl #_glace::SerdeAsset for #_item_name {
-                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
-                    #_glace::_internal::load::load_toml(bytes)
-                }
-            }
-        )),
-
-        #[cfg(feature = "serde_yaml")]
-        FileType::Yaml => Some(quote!(
-            impl #_glace::SerdeAsset for #_item_name {
-                fn deserialize<'b, T: for<'a> #_glace::serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> #_glace::Result<T> {
-                    #_glace::_internal::load::load_yaml(bytes)
-                }
-            }
-        )),
-
-        _ => None,
-    }
-}
-
-fn asset_impl(
-    glace: &StringyTokens,
-    item_name: &Ident,
-    asset_type: AssetType,
-    _config: &Config,
-) -> Option<TokenStream> {
-    match asset_type {
-        #[cfg(feature = "image")]
-        AssetType::Image => Some(quote!(
-            impl #glace::Asset for #item_name {
-                type Value = #glace::image::RgbaImage;
-
-                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
-                    #glace::_internal::load::load_image(bytes)
-                }
-            }
-        )),
-
-        #[cfg(feature = "serde")]
-        AssetType::Serde(ty) if _config.impl_serde => Some(quote!(
-            impl #glace::Asset for #item_name {
-                type Value = #ty;
-
-                fn load(bytes: Cow<[u8]>) -> #glace::Result<Self::Value> {
-                    <Self as #glace::SerdeAsset>::deserialize(bytes)
-                }
-            }
-        )),
-
-        #[cfg(feature = "edres")]
-        AssetType::EdresGenerated => unreachable!("Type should have been generated already"),
-
-        AssetType::String => Some(quote!(
-            impl #glace::Asset for #item_name {
-                type Value = Cow<'static, str>;
-
-                fn load(bytes: Cow<'static, [u8]>) -> #glace::Result<Self::Value> {
-                    match bytes {
-                        Cow::Owned(bytes) => Cow::Owned(String::from_utf8(bytes)?),
-                        Cow::Borrowed(bytes) => Cow::Borrowed(std::str::from_utf8(bytes)?),
-                    }
-                }
-            }
-        )),
-
-        AssetType::None => None,
-
-        _ => Some(quote!(
-            impl #glace::Asset for #item_name {
-                type Value = Cow<'static, [u8]>;
-
-                fn load(bytes: Cow<'static, [u8]>) -> #glace::Result<Self::Value> {
-                    Ok(bytes)
-                }
-            }
-        )),
-    }
-}
-
-fn cache_and_impl(
-    glace: &StringyTokens,
-    item_name: &Ident,
-    is_asset: bool,
-    config: &Config,
-) -> (Option<TokenStream>, Option<TokenStream>) {
-    if config.self_cached && is_asset {
-        let self_cache = quote!(
-            #glace::lazy_static::lazy_static! {
-                pub static ref CACHE: #glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value> = #glace::cache::RwCache::new();
-            }
-        );
-        let cached_impl = quote!(
-            impl #glace::CachedAsset for #item_name {
-                type CacheType = #glace::cache::RwCache<Self, Self::Value>;
-
-                fn cache() -> &'static Self::CacheType {
-                    &CACHE
-                }
-            }
-        );
-        (Some(self_cache), Some(cached_impl))
-    } else {
-        (None, None)
-    }
-}
-
 fn gen_mod_new(
     context: Arc<Context>,
     spec: ModSpec,
@@ -584,8 +266,8 @@ fn gen_mod_new(
         let prelude_contents = built.values().map(|m| &m.includes);
         let glace = &context.alias;
         let trait_exports = match cfg!(feature = "serde") {
-            true => quote!(pub use #glace::{Asset, CachedAsset, SerdeAsset};),
-            false => quote!(pub use #glace::{Asset, CachedAsset};),
+            true => quote!(pub use #glace::{Asset, CachedAsset, FileAsset, SerdeAsset, SingleAsset, VirtualAsset};),
+            false => quote!(pub use #glace::{Asset, CachedAsset, FileAsset, SingleAsset, VirtualAsset};),
         };
         quote!(
             pub mod prelude {
@@ -593,6 +275,15 @@ fn gen_mod_new(
                 #(#prelude_contents)*
             }
         )
+    });
+
+    let module_docs = docs(match is_root {
+        true => quote!(
+            //! This is the root module.
+        ),
+        false => quote!(
+            //! This is a sub module.
+        ),
     });
 
     let item_name = item_name(&spec.name);
@@ -632,6 +323,8 @@ fn gen_mod_new(
         _path: spec.path.clone(),
         tokens: quote!(
             #vis mod #mod_name {
+                #module_docs
+
                 #![allow(clippy::derive_partial_eq_without_eq)]
 
                 #prelude
@@ -921,7 +614,11 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
 
             // TODO(disk_io)
             pub fn all_variants() -> impl Iterator<Item=Self> {
-                #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::from_path)
+                #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::from_path_internal)
+            }
+
+            fn from_path_internal(path: &Path) -> Self {
+                Self::from_path(path)
             }
 
             fn path_ref(path: &Path) -> Cow<'static, Path> {
@@ -937,7 +634,8 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
         impl FileAsset for #enum_name {
             const PARENT: &'static str = #dir_path;
 
-            fn from_const_path(path: &Path) -> Option<Self> {
+            fn from_const_path<P: AsRef<Path>>(path: P) -> Option<Self> {
+                let path = path.as_ref();
                 Self::PATHS.iter()
                     .position(|&p| path == <str as AsRef<Path>>::as_ref(p))
                     .map(|index| Self::ALL[index])
@@ -949,7 +647,8 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
                     .map(|index| Self::ALL[index])
             }
 
-            fn from_path_unchecked(path: &Path) -> Self {
+            fn from_path_unchecked<P: AsRef<Path>>(path: P) -> Self {
+                let path = path.as_ref();
                 Self::from_const_path(path)
                     .unwrap_or_else(|| Self::_Path(#glace::_internal::fetch_path_index(path)))
             }

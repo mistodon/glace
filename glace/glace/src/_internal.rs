@@ -165,7 +165,13 @@ pub fn fetch_bytes_modified(
     Ok(None)
 }
 
-pub fn verify_parent(child: &Path, parent: &Path) -> Result<()> {
+pub fn verify_parent<C, P>(child: C, parent: P) -> Result<()>
+where
+    C: AsRef<Path>,
+    P: AsRef<Path>,
+{
+    let child = child.as_ref();
+    let parent = parent.as_ref();
     if !child.starts_with(parent) {
         Err(GlaceError::MismatchedParent(
             child.to_owned(),

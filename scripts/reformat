@@ -10,7 +10,7 @@ function reformat() {
 
 reformat glace
 
-readonly testcrates=$(ls test_suite)
+readonly testcrates=$(ls -d test_suite/test_*)
 for dir in $testcrates; do
-    reformat test_suite/$dir
+    reformat $dir
 done

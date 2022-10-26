@@ -64,16 +64,17 @@ pub trait FileAsset: Sized {
     const PARENT: &'static str;
 
     fn from_const_name(name: &str) -> Option<Self>;
-    fn from_const_path(path: &Path) -> Option<Self>;
-    fn from_path_unchecked(path: &Path) -> Self;
+    fn from_const_path<P: AsRef<Path>>(path: P) -> Option<Self>;
+    fn from_path_unchecked<P: AsRef<Path>>(path: P) -> Self;
     fn try_path(self) -> Result<Cow<'static, Path>>;
 
-    fn from_path(path: &Path) -> Self {
+    fn from_path<P: AsRef<Path>>(path: P) -> Self {
         Self::try_from_path(path).unwrap()
     }
 
-    fn try_from_path(path: &Path) -> Result<Self> {
-        _internal::verify_parent(path, Self::PARENT.as_ref())?;
+    fn try_from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let path = path.as_ref();
+        _internal::verify_parent(path, Self::PARENT)?;
         Ok(Self::from_path_unchecked(path))
     }
 

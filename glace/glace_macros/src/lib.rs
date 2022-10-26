@@ -1,5 +1,6 @@
 mod codegen;
 mod compat_tests;
+mod config;
 mod parsing;
 
 use std::sync::Arc;
@@ -7,7 +8,7 @@ use std::sync::Arc;
 use proc_macro::*;
 use syn::parse_macro_input;
 
-use crate::{codegen::Context, parsing::GlaceMacro};
+use crate::{config::Context, parsing::GlaceMacro};
 
 #[proc_macro]
 pub fn glace(stream: TokenStream) -> TokenStream {

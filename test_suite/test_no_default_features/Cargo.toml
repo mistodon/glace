@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 glace = { path = "../../glace/glace", default-features = false }
+helper_macros = { path = "../helper_macros" }

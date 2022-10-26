@@ -1,0 +1,19 @@
+{
+    "Key1": {
+        "desc": "JSON 1",
+        "number": 1,
+        "array": [1, 2, 3],
+        "map": {
+            "desc": "Nested in JSON 1"
+        }
+    },
+    "Key2": {
+        "desc": "JSON 2",
+        "number": 2,
+        "array": [1, 2, 3],
+        "map": {
+            "desc": "Nested in JSON 2"
+        }
+    }
+}
+

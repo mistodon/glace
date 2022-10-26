@@ -46,27 +46,24 @@ impl Parse for GlaceMacro {
         let mut alias: Option<syn::Path> = None;
         let mut overrides = HashMap::new();
 
-        if input.peek(syn::token::Brace) {
-            let override_input;
-            syn::braced!(override_input in input);
-            let override_input = &override_input;
+        let override_input;
+        syn::braced!(override_input in input);
+        let override_input = &override_input;
 
-            if override_input.parse::<Token![use]>().is_ok() {
-                let alias_override: syn::Path = override_input.parse()?;
-                override_input.parse::<Token![as]>()?;
-                let glace: Ident = override_input.parse()?;
-                if glace != ident("glace") {
-                    panic!("The only valid crate alias is `use ... as glace;`");
-                }
-                override_input.parse::<Token![;]>()?;
-                alias = Some(alias_override);
+        if override_input.parse::<Token![use]>().is_ok() {
+            let alias_override: syn::Path = override_input.parse()?;
+            override_input.parse::<Token![as]>()?;
+            let glace: Ident = override_input.parse()?;
+            if glace != ident("glace") {
+                panic!("The only valid crate alias is `use ... as glace;`");
             }
+            override_input.parse::<Token![;]>()?;
+            alias = Some(alias_override);
+        }
 
-            let overs: Punctuated<Override, Token![,]> =
-                Punctuated::parse_terminated(override_input)?;
-            for o in overs.into_iter() {
-                overrides.insert(o.path, o.properties.into_iter().collect());
-            }
+        let overs: Punctuated<Override, Token![,]> = Punctuated::parse_terminated(override_input)?;
+        for o in overs.into_iter() {
+            overrides.insert(o.path, o.properties.into_iter().collect());
         }
 
         Ok(GlaceMacro {

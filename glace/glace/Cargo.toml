@@ -11,6 +11,9 @@ keywords = ["macro", "gamedev", "serde", "file", "assets"]
 categories = ["caching", "data-structures", "development-tools", "filesystem", "game-development"]
 license = "CC0-1.0"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["full"]
 
@@ -37,6 +40,7 @@ edres_json = ["serde_json", "glace_macros/edres_json"]
 edres_toml = ["serde_toml", "glace_macros/edres_toml"]
 edres_yaml = ["serde_yaml", "glace_macros/edres_yaml"]
 
+example_documentation = ["glace_macros/example_documentation"]
 visit_includes_skipped = []
 
 [dependencies]

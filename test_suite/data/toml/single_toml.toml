@@ -1,0 +1,6 @@
+desc = "Single TOML"
+number = 1
+array = [1, 2, 3]
+
+[map]
+desc = "Nested in single TOML"

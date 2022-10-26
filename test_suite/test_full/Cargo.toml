@@ -5,4 +5,6 @@ edition = "2021"
 
 [dependencies]
 glace = { path = "../../glace/glace", default-features = false, features = [ "full", "visit_includes_skipped" ] }
+helper_macros = { path = "../helper_macros" }
 serde = { version = "1.0", features = ["derive"] }
+

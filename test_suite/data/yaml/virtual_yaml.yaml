@@ -1,0 +1,18 @@
+Key1:
+  desc: YAML 1
+  number: 1
+  array:
+    - 1
+    - 2
+    - 3
+  map:
+    desc: Nested in YAML 1
+Key2:
+  desc: YAML 2
+  number: 2
+  array:
+    - 1
+    - 2
+    - 3
+  map:
+    desc: Nested in YAML 2

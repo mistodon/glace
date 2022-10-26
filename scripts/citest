@@ -14,7 +14,7 @@ function testcrate() {
 testcrate glace
 (cd glace && cargo build)
 
-readonly testcrates=$(ls test_suite)
+readonly testcrates=$(ls -d test_suite/test_*)
 for dir in $testcrates; do
-    testcrate test_suite/$dir
+    testcrate $dir
 done

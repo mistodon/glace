@@ -1,0 +1,15 @@
+[Key1]
+desc = "TOML 1"
+number = 1
+array = [1, 2, 3]
+
+[Key1.map]
+desc = "Nested in TOML 1"
+
+[Key2]
+desc = "TOML 2"
+number = 2
+array = [1, 2, 3]
+
+[Key2.map]
+desc = "Nested in TOML 2"
