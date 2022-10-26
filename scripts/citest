@@ -2,7 +2,7 @@
 
 set -eux
 
-function testcrate {
+function testcrate() {
     local dir=$1
     (cd $dir && \
         cargo check && \

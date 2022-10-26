@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: All checks
-        run: sh scripts/citest
+        run: bash scripts/citest
 
   coverage:
 
