@@ -45,9 +45,15 @@ struct ModSpec {
 }
 
 struct BuiltMod {
-    _path: PathBuf,
+    spec: ModSpec,
     tokens: TokenStream,
     includes: TokenStream,
+    variants: Option<Vec<Ident>>,
+}
+
+struct BuiltModContents {
+    tokens: TokenStream,
+    variants: Option<Vec<Ident>>,
 }
 
 fn serde_asset_impl(
@@ -160,8 +166,12 @@ fn cache_and_impl(
     config: &Config,
 ) -> (Option<TokenStream>, Option<TokenStream>) {
     if config.self_cached && is_asset {
+        let doc = docs(quote!(
+            /// TODO
+        ));
         let self_cache = quote!(
             #glace::lazy_static::lazy_static! {
+                #doc
                 pub static ref CACHE: #glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value> = #glace::cache::RwCache::new();
             }
         );
@@ -256,6 +266,44 @@ pub fn generate_all_modules(context: Arc<Context>) -> Result<TokenStream> {
     Ok(built.remove(&context.root_path).unwrap().tokens)
 }
 
+fn gen_mirrors(built: &HashMap<PathBuf, BuiltMod>) -> Result<TokenStream> {
+    let mut impls = vec![];
+
+    for module in built.values() {
+        for mirror_path in &module.spec.config.mirrors {
+            let target = &built[mirror_path];
+            let from_type = &module.includes;
+            let to_type = &target.includes;
+
+            if module.variants != target.variants {
+                return Err(eyre!("Cannot mirror between types with different variants"));
+            }
+
+            impls.push(quote!(
+                impl From<#from_type> for #to_type {
+                    fn from(x: #from_type) -> Self {
+                        match x {
+                            #from_type::_Unknown(i) => todo!(),
+                            _ => unsafe { std::mem::transmute(x) }
+                        }
+                    }
+                }
+
+                impl From<#to_type> for #from_type {
+                    fn from(x: #to_type) -> Self {
+                        match x {
+                            #to_type::_Unknown(i) => todo!(),
+                            _ => unsafe { std::mem::transmute(x) }
+                        }
+                    }
+                }
+            ));
+        }
+    }
+
+    Ok(quote!(#(#impls)*))
+}
+
 fn gen_mod_new(
     context: Arc<Context>,
     spec: ModSpec,
@@ -272,7 +320,7 @@ fn gen_mod_new(
         quote!(
             pub mod prelude {
                 #trait_exports
-                #(#prelude_contents)*
+                #(pub use super::#prelude_contents;)*
             }
         )
     });
@@ -287,8 +335,13 @@ fn gen_mod_new(
     });
 
     let item_name = item_name(&spec.name);
+    let contents = gen_mod_contents(Arc::clone(&context), &spec, &item_name)?;
+    let item_name = ident(item_name);
 
-    let item_tokens = gen_mod_contents(Arc::clone(&context), &spec, &item_name)?;
+    let BuiltModContents {
+        tokens: item_tokens,
+        variants,
+    } = contents;
 
     let last = ident(path_name(spec.path.file_stem().unwrap()));
     let includes = match spec.path.strip_prefix(&context.root_path)?.parent() {
@@ -298,29 +351,29 @@ fn gen_mod_new(
                 _ => None,
             });
 
-            let item_name = ident(&item_name);
-            quote!(pub use super::#(#components::)*#last::#item_name;)
+            quote!(#(#components::)*#last::#item_name)
         }
         None => {
-            quote!(pub use super::#last::#item_name;)
+            quote!(#last::#item_name)
         }
     };
 
-    let (vis, mod_name) = if is_root {
+    let (vis, mod_name, mirrors) = if is_root {
         (
             match &context.root_visibility {
                 Some(vis) => quote!(#vis),
                 None => quote!(),
             },
             ident(&context.root_mod_name),
+            Some(gen_mirrors(built)?),
         )
     } else {
-        (quote!(pub), ident(&spec.name))
+        (quote!(pub), ident(&spec.name), None)
     };
-    let sub_modules = spec.dependencies.iter().map(|path| &built[path].tokens);
+    let sub_modules = spec.dependencies.iter().map(|path| &built[path].tokens).collect::<Vec<_>>();
 
     Ok(BuiltMod {
-        _path: spec.path.clone(),
+        spec,
         tokens: quote!(
             #vis mod #mod_name {
                 #module_docs
@@ -333,14 +386,21 @@ fn gen_mod_new(
 
                 #item_tokens
 
+                #mirrors
+
                 #(#sub_modules)*
             }
         ),
         includes,
+        variants,
     })
 }
 
-fn gen_mod_contents(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<TokenStream> {
+fn gen_mod_contents(
+    context: Arc<Context>,
+    spec: &ModSpec,
+    item_name: &str,
+) -> Result<BuiltModContents> {
     Ok(match spec.config.mod_type {
         ModType::Dir => gen_dir_mod(context, spec, item_name)?,
 
@@ -354,7 +414,7 @@ fn gen_mod_contents(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> R
     })
 }
 
-fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<TokenStream> {
+fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<BuiltModContents> {
     let glace = &context.alias;
     let enum_name = ident(&item_name);
 
@@ -394,7 +454,7 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
         })
         .collect::<Vec<_>>();
     let variant_names = variant_str_names.iter().map(ident).collect::<Vec<_>>();
-    let variant_names = &variant_names;
+    let variant_names_ref = &variant_names;
 
     let variant_paths = files
         .iter()
@@ -439,7 +499,7 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
             impl BytesAsset for #enum_name {
                 fn try_bytes(&self) -> #glace::Result<Cow<'static, [u8]>> {
                     Ok(match *self {
-                        Self::_Path(_index) => #unknown_try_bytes,
+                        Self::_Unknown(_index) => #unknown_try_bytes,
                         c => #known_try_bytes,
                     })
                 }
@@ -456,7 +516,7 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
             impl StrAsset for #enum_name {
                 fn try_string(&self) -> #glace::Result<Cow<'static, str>> {
                     Ok(match *self {
-                        Self::_Path(_index) => #unknown_try_string,
+                        Self::_Unknown(_index) => #unknown_try_string,
                         c => #known_try_string,
                     })
                 }
@@ -538,7 +598,7 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
                     S: #glace::serde::Serializer
                 {
                     match *self {
-                        Self::_Path(_) => {
+                        Self::_Unknown(_) => {
                             let path = self.path();
                             let key = #glace::PathedKey::Path { path: path.as_ref() };
                             key.serialize(serializer)
@@ -565,116 +625,123 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
             }
     ));
 
-    Ok(quote!(
-        use std::{
-            borrow::Cow,
-            path::Path,
-            time::SystemTime,
-        };
+    Ok(BuiltModContents {
+        tokens: quote!(
+            use std::{
+                borrow::Cow,
+                path::Path,
+                time::SystemTime,
+            };
 
-        use #glace::{FileAsset, BytesAsset, StrAsset};
+            use #glace::{FileAsset, BytesAsset, StrAsset};
 
-        #edres_tokens
+            #edres_tokens
 
-        #self_cache
+            #self_cache
 
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        #[repr(u32)]
-        pub enum #enum_name {
-            #(#variant_names,)*
-            _Path(u32),
-        }
-
-        impl #enum_name {
-            pub const ALL: &'static [Self] = &[
-                #(Self::#variant_names,)*
-            ];
-
-            const PATHS: &'static [&'static str] = &[
-                #(#variant_paths,)*
-            ];
-
-            const NAMES: &'static [&'static str] = &[
-                #(#variant_str_names,)*
-            ];
-
-            #const_data
-
-            const fn index(self) -> usize {
-                (0x00000000ffffffff & unsafe { std::mem::transmute::<_, u64>(self) }) as usize
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            #[repr(u32)]
+            pub enum #enum_name {
+                #(#variant_names_ref,)*
+                _Unknown(u32),
             }
 
-            pub const fn const_path(self) -> &'static str {
-                &Self::PATHS[self.index()]
+            impl #enum_name {
+                pub const ALL: &'static [Self] = &[
+                    #(Self::#variant_names_ref,)*
+                ];
+
+                const PATHS: &'static [&'static str] = &[
+                    #(#variant_paths,)*
+                ];
+
+                const NAMES: &'static [&'static str] = &[
+                    #(#variant_str_names,)*
+                ];
+
+                #const_data
+
+                const fn index(self) -> usize {
+                    (0x00000000ffffffff & unsafe { std::mem::transmute::<_, u64>(self) }) as usize
+                }
+
+                pub const fn const_path(self) -> &'static str {
+                    &Self::PATHS[self.index()]
+                }
+
+                pub const fn const_name(self) -> &'static str {
+                    &Self::NAMES[self.index()]
+                }
+
+                // TODO(disk_io)
+                pub fn all_variants() -> impl Iterator<Item=Self> {
+                    #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::from_path_internal)
+                }
+
+                fn from_path_internal(path: &Path) -> Self {
+                    Self::from_path(path)
+                }
+
+                fn path_ref(path: &Path) -> Cow<'static, Path> {
+                    Self::from_path(path).path()
+                }
+
+                // TODO(disk_io)
+                pub fn all_paths() -> impl Iterator<Item=Cow<'static, Path>> {
+                    #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::path_ref)
+                }
             }
 
-            pub const fn const_name(self) -> &'static str {
-                &Self::NAMES[self.index()]
+            impl FileAsset for #enum_name {
+                const PARENT: &'static str = #dir_path;
+
+                fn from_const_path<P: AsRef<Path>>(path: P) -> Option<Self> {
+                    let path = path.as_ref();
+                    Self::PATHS.iter()
+                        .position(|&p| path == <str as AsRef<Path>>::as_ref(p))
+                        .map(|index| Self::ALL[index])
+                }
+
+                fn from_const_name(name: &str) -> Option<Self> {
+                    Self::NAMES.iter()
+                        .position(|&n| n == name)
+                        .map(|index| Self::ALL[index])
+                }
+
+                fn from_path_unchecked<P: AsRef<Path>>(path: P) -> Self {
+                    let path = path.as_ref();
+                    Self::from_const_path(path)
+                        .unwrap_or_else(|| Self::_Unknown(#glace::_internal::fetch_path_index(path)))
+                }
+
+                fn try_path(self) -> #glace::Result<Cow<'static, Path>> {
+                    Ok(match self {
+                        Self::_Unknown(index) => Cow::Owned(#glace::_internal::fetch_path(index)?),
+                        c => Cow::Borrowed(c.const_path().as_ref()),
+                    })
+                }
             }
 
-            // TODO(disk_io)
-            pub fn all_variants() -> impl Iterator<Item=Self> {
-                #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::from_path_internal)
-            }
+            #serde_impl
 
-            fn from_path_internal(path: &Path) -> Self {
-                Self::from_path(path)
-            }
+            #base_asset_impls
 
-            fn path_ref(path: &Path) -> Cow<'static, Path> {
-                Self::from_path(path).path()
-            }
+            #serde_asset_impl
 
-            // TODO(disk_io)
-            pub fn all_paths() -> impl Iterator<Item=Cow<'static, Path>> {
-                #glace::_internal::visit_files(Self::PARENT.as_ref(), Self::path_ref)
-            }
-        }
+            #asset_impl
 
-        impl FileAsset for #enum_name {
-            const PARENT: &'static str = #dir_path;
-
-            fn from_const_path<P: AsRef<Path>>(path: P) -> Option<Self> {
-                let path = path.as_ref();
-                Self::PATHS.iter()
-                    .position(|&p| path == <str as AsRef<Path>>::as_ref(p))
-                    .map(|index| Self::ALL[index])
-            }
-
-            fn from_const_name(name: &str) -> Option<Self> {
-                Self::NAMES.iter()
-                    .position(|&n| n == name)
-                    .map(|index| Self::ALL[index])
-            }
-
-            fn from_path_unchecked<P: AsRef<Path>>(path: P) -> Self {
-                let path = path.as_ref();
-                Self::from_const_path(path)
-                    .unwrap_or_else(|| Self::_Path(#glace::_internal::fetch_path_index(path)))
-            }
-
-            fn try_path(self) -> #glace::Result<Cow<'static, Path>> {
-                Ok(match self {
-                    Self::_Path(index) => Cow::Owned(#glace::_internal::fetch_path(index)?),
-                    c => Cow::Borrowed(c.const_path().as_ref()),
-                })
-            }
-        }
-
-        #serde_impl
-
-        #base_asset_impls
-
-        #serde_asset_impl
-
-        #asset_impl
-
-        #self_cache_impl
-    ))
+            #self_cache_impl
+        ),
+        variants: Some(variant_names),
+    })
 }
 
 #[cfg(feature = "serde")]
-fn gen_single_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<TokenStream> {
+fn gen_single_mod(
+    context: Arc<Context>,
+    spec: &ModSpec,
+    item_name: &str,
+) -> Result<BuiltModContents> {
     let glace = &context.alias;
     let struct_name = ident(&item_name);
     let file_path = spec.path.to_string_lossy();
@@ -813,48 +880,55 @@ fn gen_single_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Res
         false => quote!(#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]),
     };
 
-    Ok(quote!(
-        use std::{
-            borrow::Cow,
-            path::Path,
-            time::SystemTime,
-        };
+    Ok(BuiltModContents {
+        tokens: quote!(
+            use std::{
+                borrow::Cow,
+                path::Path,
+                time::SystemTime,
+            };
 
-        use #glace::{SingleAsset, BytesAsset, StrAsset};
+            use #glace::{SingleAsset, BytesAsset, StrAsset};
 
-        #edres_tokens
+            #edres_tokens
 
-        #self_cache
+            #self_cache
 
-        #derives
-        pub struct #struct_name;
+            #derives
+            pub struct #struct_name;
 
-        impl #struct_name {
-            #const_data
+            impl #struct_name {
+                #const_data
 
-            // TODO(disk_io)
-            // pub fn all_variants() -> impl Iterator<Item=Self> {
-            //     todo!("read keys from actual file")
-            // }
-        }
+                // TODO(disk_io)
+                // pub fn all_variants() -> impl Iterator<Item=Self> {
+                //     todo!("read keys from actual file")
+                // }
+            }
 
-        impl SingleAsset for #struct_name {
-            const NAME: &'static str = #item_name;
-            const PATH: &'static str = #file_path;
-        }
+            impl SingleAsset for #struct_name {
+                const NAME: &'static str = #item_name;
+                const PATH: &'static str = #file_path;
+            }
 
-        #base_asset_impls
+            #base_asset_impls
 
-        #serde_asset_impl
+            #serde_asset_impl
 
-        #asset_impl
+            #asset_impl
 
-        #self_cache_impl
-    ))
+            #self_cache_impl
+        ),
+        variants: None,
+    })
 }
 
 #[cfg(feature = "serde")]
-fn gen_virtual_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<TokenStream> {
+fn gen_virtual_mod(
+    context: Arc<Context>,
+    spec: &ModSpec,
+    item_name: &str,
+) -> Result<BuiltModContents> {
     let glace = &context.alias;
     let enum_name = ident(&item_name);
     let file_path = spec.path.to_string_lossy();
@@ -905,8 +979,8 @@ fn gen_virtual_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Re
     };
 
     let variant_names = data.keys().map(ident).collect::<Vec<_>>();
-    let variant_str_names = data.keys().collect::<Vec<_>>();
-    let variant_names = &variant_names;
+    let variant_str_names = data.keys().cloned().collect::<Vec<_>>();
+    let variant_names_ref = &variant_names;
 
     let value_bytes = data
         .values()
@@ -1114,83 +1188,86 @@ fn gen_virtual_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Re
         }
     ));
 
-    Ok(quote!(
-        use std::{
-            borrow::Cow,
-            path::Path,
-            time::SystemTime,
-        };
+    Ok(BuiltModContents {
+        tokens: quote!(
+            use std::{
+                borrow::Cow,
+                path::Path,
+                time::SystemTime,
+            };
 
-        use #glace::{VirtualAsset, BytesAsset, StrAsset};
+            use #glace::{VirtualAsset, BytesAsset, StrAsset};
 
-        #edres_tokens
+            #edres_tokens
 
-        #self_cache
+            #self_cache
 
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        #[repr(u32)]
-        pub enum #enum_name {
-            #(#variant_names,)*
-            _Unknown(u32),
-        }
-
-        impl #enum_name {
-            pub const ALL: &'static [Self] = &[
-                #(Self::#variant_names,)*
-            ];
-
-            const NAMES: &'static [&'static str] = &[
-                #(#variant_str_names,)*
-            ];
-
-            #const_data
-
-            const fn index(self) -> usize {
-                (0x00000000ffffffff & unsafe { std::mem::transmute::<_, u64>(self) }) as usize
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            #[repr(u32)]
+            pub enum #enum_name {
+                #(#variant_names_ref,)*
+                _Unknown(u32),
             }
 
-            pub const fn const_name(self) -> &'static str {
-                &Self::NAMES[self.index()]
+            impl #enum_name {
+                pub const ALL: &'static [Self] = &[
+                    #(Self::#variant_names_ref,)*
+                ];
+
+                const NAMES: &'static [&'static str] = &[
+                    #(#variant_str_names,)*
+                ];
+
+                #const_data
+
+                const fn index(self) -> usize {
+                    (0x00000000ffffffff & unsafe { std::mem::transmute::<_, u64>(self) }) as usize
+                }
+
+                pub const fn const_name(self) -> &'static str {
+                    &Self::NAMES[self.index()]
+                }
+
+                // TODO(disk_io)
+                // pub fn all_variants() -> impl Iterator<Item=Self> {
+                //     todo!("read keys from actual file")
+                // }
             }
 
-            // TODO(disk_io)
-            // pub fn all_variants() -> impl Iterator<Item=Self> {
-            //     todo!("read keys from actual file")
-            // }
-        }
+            impl VirtualAsset for #enum_name {
+                const PATH: &'static str = #file_path;
 
-        impl VirtualAsset for #enum_name {
-            const PATH: &'static str = #file_path;
+                #try_load_all_fn
 
-            #try_load_all_fn
+                fn from_const_name(name: &str) -> Option<Self> {
+                    Self::NAMES.iter()
+                        .position(|&n| n == name)
+                        .map(|index| Self::ALL[index])
+                }
 
-            fn from_const_name(name: &str) -> Option<Self> {
-                Self::NAMES.iter()
-                    .position(|&n| n == name)
-                    .map(|index| Self::ALL[index])
+                fn from_name(name: &str) -> Self {
+                    Self::from_const_name(name)
+                        .unwrap_or_else(|| Self::_Unknown(#glace::_internal::fetch_name_index(name)))
+                }
+
+                fn try_name(self) -> #glace::Result<Cow<'static, str>> {
+                    Ok(match self {
+                        Self::_Unknown(index) => Cow::Owned(#glace::_internal::fetch_name(index)?),
+                        c => Cow::Borrowed(c.const_name()),
+                    })
+                }
             }
 
-            fn from_name(name: &str) -> Self {
-                Self::from_const_name(name)
-                    .unwrap_or_else(|| Self::_Unknown(#glace::_internal::fetch_name_index(name)))
-            }
+            #serde_impl
 
-            fn try_name(self) -> #glace::Result<Cow<'static, str>> {
-                Ok(match self {
-                    Self::_Unknown(index) => Cow::Owned(#glace::_internal::fetch_name(index)?),
-                    c => Cow::Borrowed(c.const_name()),
-                })
-            }
-        }
+            #base_asset_impls
 
-        #serde_impl
+            #serde_asset_impl
 
-        #base_asset_impls
+            #asset_impl
 
-        #serde_asset_impl
-
-        #asset_impl
-
-        #self_cache_impl
-    ))
+            #self_cache_impl
+        ),
+        variants: Some(variant_names),
+    })
 }

@@ -118,11 +118,13 @@ pub enum Property {
     #[cfg(feature = "edres")]
     NoEdres,
 
-    // Transpose(TransposeType),
+    Mirror(PathBuf),
     Type(ParseType),
 
     #[cfg(feature = "serde")]
     Serde(Box<syn::Type>),
+
+    // Transpose(TransposeType),
 }
 
 pub enum ParseType {
@@ -168,6 +170,13 @@ impl Parse for Property {
 
             #[cfg(feature = "serde")]
             "Virtual" => Property::Virtual,
+
+            "Mirror" => {
+                input.parse::<Token![<]>()?;
+                let path = input.parse::<syn::LitStr>()?.value().into();
+                input.parse::<Token![>]>()?;
+                Property::Mirror(path)
+            }
 
             "Type" => {
                 input.parse::<Token![<]>()?;

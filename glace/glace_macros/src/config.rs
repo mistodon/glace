@@ -103,6 +103,7 @@ pub struct Config {
     pub mod_type: ModType,
     pub explicit_file_type: Option<FileType>,
     pub explicit_asset_type: Option<AssetType>,
+    pub mirrors: Vec<PathBuf>,
 }
 
 impl Config {
@@ -194,6 +195,7 @@ impl Context {
                 mod_type: ModType::Dir,
                 explicit_file_type: None,
                 explicit_asset_type: None,
+                mirrors: vec![],
             })
     }
 
@@ -263,6 +265,7 @@ impl From<GlaceMacro> for Context {
                 mod_type: ModType::Dir,
                 explicit_file_type: None,
                 explicit_asset_type: None,
+                mirrors: vec![],
             };
 
             for prop in props {
@@ -293,6 +296,12 @@ impl From<GlaceMacro> for Context {
 
                     #[cfg(feature = "edres")]
                     Property::NoEdres => config.allow_edres = false,
+
+                    Property::Mirror(path) => {
+                        let mut full_path = call.path.clone();
+                        full_path.push(path);
+                        config.mirrors.push(full_path);
+                    }
 
                     Property::Type(ty) => match ty {
                         #[cfg(feature = "image")]

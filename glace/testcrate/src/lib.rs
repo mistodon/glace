@@ -29,7 +29,7 @@ glace::glace! {
         "autoitems.yaml": Virtual,
 
         "config.toml": Single + Serde<Config>,
-        "items.yaml": Virtual + Serde<ItemData>,
+        "items.yaml": Virtual + Serde<ItemData> + Mirror<"autoitems.yaml">,
         "profiles": Serde<Profile>,
 
         // "languages": Transpose,
@@ -125,11 +125,11 @@ mod tests {
         );
         assert_eq!(
             Notes::from_path("assets/text/notes/_a_secret_note.txt"),
-            Notes::_Path(0)
+            Notes::_Unknown(0)
         );
         assert_eq!(
             Notes::from_path("assets/text/notes/_another_secret_note.txt"),
-            Notes::_Path(1)
+            Notes::_Unknown(1)
         );
     }
 
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn all_variants_works() {
-        let expected = vec![Notes::Note1, Notes::Note2, Notes::_Path(0), Notes::_Path(1)];
+        let expected = vec![Notes::Note1, Notes::Note2, Notes::_Unknown(0), Notes::_Unknown(1)];
         let mut actual = Notes::all_variants().collect::<Vec<_>>();
         actual.sort();
 
@@ -311,5 +311,13 @@ mod tests {
 
         assert_eq!(Items::Item1.value().name, "Item one");
         assert_eq!(Json::SecondaryJsonFile.value().name, "two");
+    }
+
+    #[test]
+    fn mirroring() {
+        use assets::prelude::*;
+
+        assert_eq!(Autoitems::from(Items::Item1), Autoitems::Item1);
+        assert_eq!(Items::from(Autoitems::Item1), Items::Item1);
     }
 }

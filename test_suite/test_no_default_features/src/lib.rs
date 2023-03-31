@@ -100,7 +100,7 @@ mod tests {
         let invalid = Images::try_from_path("wrong_parent/file.png");
 
         assert_eq!(known.unwrap(), Images::Happy);
-        assert!(matches!(unknown, Ok(Images::_Path(_))));
+        assert!(matches!(unknown, Ok(Images::_Unknown(_))));
         assert!(invalid.is_err());
     }
 }

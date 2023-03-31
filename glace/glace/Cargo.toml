@@ -1,6 +1,6 @@
 [package]
 name = "glace"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Vi <violet@hey.com>"]
 description = "A type-safe, user-friendly proc macro for embedding a file tree into your code."
