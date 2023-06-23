@@ -317,7 +317,11 @@ fn gen_mod_new(
             true => quote!(pub use #glace::{Asset, CachedAsset, FileAsset, SerdeAsset, SingleAsset, VirtualAsset};),
             false => quote!(pub use #glace::{Asset, CachedAsset, FileAsset, SingleAsset, VirtualAsset};),
         };
+        let prelude_docs = docs(quote!(
+                /// A prelude exporting all generated asset key types, as well as various `Asset` traits.
+                ));
         quote!(
+            #prelude_docs
             pub mod prelude {
                 #trait_exports
                 #(pub use super::#prelude_contents;)*
