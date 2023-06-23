@@ -1,8 +1,9 @@
 # Asset management / staticfs
 
 - Refactoring / config improvements
-- [ ] Feature to generate docs in the macro, for use in the example
-- [ ] Set up testing for multiple feature configurations
+- [/] Document crate items
+- [/] Feature to generate docs in the macro, for use in the example
+- [/] Set up testing for multiple feature configurations
 
 - Later
 - [ ] `fn asset_from_path(Path) -> dyn Any` that can be downcast

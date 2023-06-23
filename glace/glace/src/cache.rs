@@ -1,3 +1,5 @@
+//! Data structures used internally by the `self_cached` feature.
+
 use std::{collections::HashMap, hash::Hash, sync::Arc, time::SystemTime};
 
 use parking_lot::RwLock;
@@ -6,6 +8,8 @@ use crate::Asset;
 
 type Entry<V> = (Arc<V>, Option<SystemTime>);
 
+/// The trait required for implementing a backing cache for a
+/// [`CachedAsset`](crate::CachedAsset).
 pub trait Cache<K, V> {
     fn get(&self, key: &K) -> Arc<V>;
     fn get_updated(&self, key: &K) -> Arc<V>;
@@ -14,6 +18,7 @@ pub trait Cache<K, V> {
     fn clear(&self);
 }
 
+/// A thread safe [`Cache`] implementation protected by a read-write lock.
 #[derive(Default)]
 pub struct RwCache<K, V>
 where

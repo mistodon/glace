@@ -1,3 +1,4 @@
+/// A proc macro for embedding an entire directory tree into your Rust code in a type-safe, human-friendly, flexible way.
 pub use glace_macros::glace;
 
 #[cfg(feature = "image")]
@@ -11,10 +12,13 @@ pub use lazy_static;
 #[cfg(feature = "serde")]
 pub use serde;
 
+#[doc(hidden)]
 pub mod _internal;
+
 pub mod cache;
 
 #[cfg(doc)]
+/// Example output of using the `glace!` macro with [this directory](https://github.com/mistodon/glace/tree/main/glace/example_docs/example_assets). (Only present in docs.)
 pub mod _example_docs;
 
 use std::{
@@ -30,6 +34,8 @@ use thiserror::Error;
 
 use crate::cache::Cache;
 
+/// A wrapper type for serializing and deserializing asset keys that may or may not have a
+/// path known at compile time.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum PathedKey<'a> {
@@ -37,6 +43,7 @@ pub enum PathedKey<'a> {
     Path { path: &'a Path },
 }
 
+/// An error type for lookup or parsing errors.
 #[derive(Debug, Error)]
 pub enum GlaceError {
     #[error("Path `{0}` is not under the correct parent directory (`{1}`)")]
@@ -61,8 +68,10 @@ pub enum GlaceError {
     FromUtf8(#[from] std::string::FromUtf8Error),
 }
 
+/// Result type for this crate.
 pub type Result<T> = std::result::Result<T, GlaceError>;
 
+/// Implemented by asset keys whose variants represent files.
 pub trait FileAsset: Sized {
     const PARENT: &'static str;
 
@@ -86,6 +95,8 @@ pub trait FileAsset: Sized {
     }
 }
 
+/// Implemented by asset keys whose variants each represent a section within a file.
+/// (For example, one value of a YAML map.)
 pub trait VirtualAsset: Sized {
     const PATH: &'static str;
 
@@ -100,11 +111,13 @@ pub trait VirtualAsset: Sized {
     }
 }
 
+/// Implemented by single-value (non-enum) asset keys that represent the contents of a single known file.
 pub trait SingleAsset: Sized {
     const NAME: &'static str;
     const PATH: &'static str;
 }
 
+/// Implemented by asset keys whose variants represent raw binary data.
 pub trait BytesAsset {
     fn try_bytes(&self) -> Result<Cow<'static, [u8]>>;
     fn try_bytes_modified(
@@ -143,6 +156,7 @@ pub trait BytesAsset {
     }
 }
 
+/// Implemented by asset keys whose variants represent UTF-8 text data.
 pub trait StrAsset: BytesAsset {
     fn try_string(&self) -> Result<Cow<'static, str>>;
 
@@ -190,6 +204,7 @@ pub trait StrAsset: BytesAsset {
     }
 }
 
+/// Implemented by asset keys whose variants represent instances of a concrete type, defined as [`Asset::Value`].
 pub trait Asset: BytesAsset {
     type Value;
 
@@ -239,6 +254,7 @@ pub trait Asset: BytesAsset {
     }
 }
 
+/// Implemented by asset keys whose variants represent `serde`-compatible data (such as JSON or YAML).
 #[cfg(feature = "serde")]
 pub trait SerdeAsset: BytesAsset {
     fn deserialize<'b, T: for<'a> serde::Deserialize<'a>>(bytes: Cow<'b, [u8]>) -> Result<T>;
@@ -289,6 +305,8 @@ pub trait SerdeAsset: BytesAsset {
     }
 }
 
+/// Implemented by asset keys that can cache their corresponding values. (Requires the
+/// `self_cached` feature.)
 pub trait CachedAsset: Asset
 where
     Self: 'static + Clone + Eq + Hash,
