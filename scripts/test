@@ -3,4 +3,5 @@
 set -eux
 set -o pipefail
 
+sh scripts/gen_docs
 sh scripts/citest

@@ -14,12 +14,12 @@ use syn::Ident;
 use crate::config::{AssetType, Config, Context, FileType, ModType, StringyTokens};
 
 fn docs(_tokens: TokenStream) -> Option<TokenStream> {
-    #[cfg(feature = "example_documentation")]
+    #[cfg(feature = "example_docs")]
     {
         Some(_tokens)
     }
 
-    #[cfg(not(feature = "example_documentation"))]
+    #[cfg(not(feature = "example_docs"))]
     {
         None
     }

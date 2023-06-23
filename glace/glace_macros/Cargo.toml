@@ -29,7 +29,7 @@ edres_json = ["edres", "edres/json", "serde_json"]
 edres_toml = ["edres", "edres/toml", "serde_toml"]
 edres_yaml = ["edres", "edres/yaml", "serde_yaml"]
 
-example_documentation = []
+example_docs = []
 
 [dependencies]
 convert_case = "0.6"

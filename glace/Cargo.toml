@@ -5,3 +5,7 @@ members = [
     "glace_macros",
     "testcrate",
 ]
+
+exclude = [
+    "example_docs",
+]

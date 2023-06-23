@@ -1,0 +1,8 @@
+[package]
+name = "example_docs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glace = { path = "../glace" }
+glace_macros = { path = "../glace_macros", features = ["example_docs"] }

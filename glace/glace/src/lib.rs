@@ -14,6 +14,9 @@ pub use serde;
 pub mod _internal;
 pub mod cache;
 
+#[cfg(doc)]
+pub mod _example_docs;
+
 use std::{
     borrow::Cow,
     hash::Hash,
@@ -310,17 +313,3 @@ where
         Self::cache().remove(self);
     }
 }
-
-#[cfg(doc)]
-mod example_wrapper {
-    use crate::glace;
-    glace! {
-        #[path = "example_assets"]
-        pub mod _docs_only_example_assets {
-            use crate as glace;
-        }
-    }
-}
-
-#[cfg(doc)]
-pub use example_wrapper::_docs_only_example_assets;
