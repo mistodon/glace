@@ -113,12 +113,12 @@ pub fn fetch_name(index: u32) -> Result<String> {
 
 pub fn fetch_bytes(index: u32) -> Result<Vec<u8>> {
     let path = fetch_path(index)?;
-    Ok(std::fs::read(&path)?)
+    Ok(std::fs::read(path)?)
 }
 
 pub fn fetch_string(index: u32) -> Result<String> {
     let path = fetch_path(index)?;
-    Ok(std::fs::read_to_string(&path)?)
+    Ok(std::fs::read_to_string(path)?)
 }
 
 pub fn visit_files<T, F>(dir: &Path, function: F) -> impl Iterator<Item = T>

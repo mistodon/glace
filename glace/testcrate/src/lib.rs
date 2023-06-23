@@ -173,7 +173,12 @@ mod tests {
 
     #[test]
     fn all_variants_works() {
-        let expected = vec![Notes::Note1, Notes::Note2, Notes::_Unknown(0), Notes::_Unknown(1)];
+        let expected = vec![
+            Notes::Note1,
+            Notes::Note2,
+            Notes::_Unknown(0),
+            Notes::_Unknown(1),
+        ];
         let mut actual = Notes::all_variants().collect::<Vec<_>>();
         actual.sort();
 

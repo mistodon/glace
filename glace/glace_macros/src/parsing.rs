@@ -123,7 +123,6 @@ pub enum Property {
 
     #[cfg(feature = "serde")]
     Serde(Box<syn::Type>),
-
     // Transpose(TransposeType),
 }
 

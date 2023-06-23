@@ -370,7 +370,11 @@ fn gen_mod_new(
     } else {
         (quote!(pub), ident(&spec.name), None)
     };
-    let sub_modules = spec.dependencies.iter().map(|path| &built[path].tokens).collect::<Vec<_>>();
+    let sub_modules = spec
+        .dependencies
+        .iter()
+        .map(|path| &built[path].tokens)
+        .collect::<Vec<_>>();
 
     Ok(BuiltMod {
         spec,
@@ -416,7 +420,7 @@ fn gen_mod_contents(
 
 fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result<BuiltModContents> {
     let glace = &context.alias;
-    let enum_name = ident(&item_name);
+    let enum_name = ident(item_name);
 
     let file_context = Arc::clone(&context);
 
@@ -743,7 +747,7 @@ fn gen_single_mod(
     item_name: &str,
 ) -> Result<BuiltModContents> {
     let glace = &context.alias;
-    let struct_name = ident(&item_name);
+    let struct_name = ident(item_name);
     let file_path = spec.path.to_string_lossy();
 
     let file_type = spec.config.file_type(&[&spec.path]);
@@ -930,7 +934,7 @@ fn gen_virtual_mod(
     item_name: &str,
 ) -> Result<BuiltModContents> {
     let glace = &context.alias;
-    let enum_name = ident(&item_name);
+    let enum_name = ident(item_name);
     let file_path = spec.path.to_string_lossy();
 
     let file_type = spec.config.file_type(&[&spec.path]);
