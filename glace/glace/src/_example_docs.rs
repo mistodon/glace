@@ -11,45 +11,10 @@ pub mod example_assets {
     use super::*;
     use crate::{BytesAsset, FileAsset, StrAsset};
     use std::{borrow::Cow, path::Path, time::SystemTime};
-    #[allow(missing_copy_implementations)]
-    #[allow(non_camel_case_types)]
-    #[allow(dead_code)]
     /// TODO
-    pub struct CACHE {
-        __private_field: (),
-    }
-    #[doc(hidden)]
-    pub static CACHE: CACHE = CACHE {
-        __private_field: (),
-    };
-    impl ::lazy_static::__Deref for CACHE {
-        type Target = crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value>;
-        fn deref(
-            &self,
-        ) -> &crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value> {
-            #[inline(always)]
-            fn __static_ref_initialize(
-            ) -> crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value>
-            {
-                crate::cache::RwCache::new()
-            }
-            #[inline(always)]
-            fn __stability(
-            ) -> &'static crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value>
-            {
-                static LAZY: ::lazy_static::lazy::Lazy<
-                    crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value>,
-                > = ::lazy_static::lazy::Lazy::INIT;
-                LAZY.get(__static_ref_initialize)
-            }
-            __stability()
-        }
-    }
-    impl ::lazy_static::LazyStatic for CACHE {
-        fn initialize(lazy: &Self) {
-            let _ = &**lazy;
-        }
-    }
+    pub static mut CACHE: std::sync::OnceLock<
+        crate::cache::RwCache<ExampleAssets, <ExampleAssets as crate::Asset>::Value>,
+    > = std::sync::OnceLock::new();
     #[repr(u32)]
     pub enum ExampleAssets {
         _Unknown(u32),
@@ -261,7 +226,7 @@ pub mod example_assets {
     impl crate::CachedAsset for ExampleAssets {
         type CacheType = crate::cache::RwCache<Self, Self::Value>;
         fn cache() -> &'static Self::CacheType {
-            &CACHE
+            unsafe { CACHE.get_or_init(|| crate::cache::RwCache::new()) }
         }
     }
     pub mod audio {
@@ -270,42 +235,10 @@ pub mod example_assets {
         use super::*;
         use crate::{BytesAsset, FileAsset, StrAsset};
         use std::{borrow::Cow, path::Path, time::SystemTime};
-        #[allow(missing_copy_implementations)]
-        #[allow(non_camel_case_types)]
-        #[allow(dead_code)]
         /// TODO
-        pub struct CACHE {
-            __private_field: (),
-        }
-        #[doc(hidden)]
-        pub static CACHE: CACHE = CACHE {
-            __private_field: (),
-        };
-        impl ::lazy_static::__Deref for CACHE {
-            type Target = crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value>;
-            fn deref(&self) -> &crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value> {
-                #[inline(always)]
-                fn __static_ref_initialize(
-                ) -> crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value> {
-                    crate::cache::RwCache::new()
-                }
-                #[inline(always)]
-                fn __stability(
-                ) -> &'static crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value>
-                {
-                    static LAZY: ::lazy_static::lazy::Lazy<
-                        crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value>,
-                    > = ::lazy_static::lazy::Lazy::INIT;
-                    LAZY.get(__static_ref_initialize)
-                }
-                __stability()
-            }
-        }
-        impl ::lazy_static::LazyStatic for CACHE {
-            fn initialize(lazy: &Self) {
-                let _ = &**lazy;
-            }
-        }
+        pub static mut CACHE: std::sync::OnceLock<
+            crate::cache::RwCache<Audio, <Audio as crate::Asset>::Value>,
+        > = std::sync::OnceLock::new();
         #[repr(u32)]
         pub enum Audio {
             EmptyWavFile,
@@ -532,7 +465,7 @@ pub mod example_assets {
         impl crate::CachedAsset for Audio {
             type CacheType = crate::cache::RwCache<Self, Self::Value>;
             fn cache() -> &'static Self::CacheType {
-                &CACHE
+                unsafe { CACHE.get_or_init(|| crate::cache::RwCache::new()) }
             }
         }
     }
@@ -542,42 +475,10 @@ pub mod example_assets {
         use super::*;
         use crate::{BytesAsset, FileAsset, StrAsset};
         use std::{borrow::Cow, path::Path, time::SystemTime};
-        #[allow(missing_copy_implementations)]
-        #[allow(non_camel_case_types)]
-        #[allow(dead_code)]
         /// TODO
-        pub struct CACHE {
-            __private_field: (),
-        }
-        #[doc(hidden)]
-        pub static CACHE: CACHE = CACHE {
-            __private_field: (),
-        };
-        impl ::lazy_static::__Deref for CACHE {
-            type Target = crate::cache::RwCache<Image, <Image as crate::Asset>::Value>;
-            fn deref(&self) -> &crate::cache::RwCache<Image, <Image as crate::Asset>::Value> {
-                #[inline(always)]
-                fn __static_ref_initialize(
-                ) -> crate::cache::RwCache<Image, <Image as crate::Asset>::Value> {
-                    crate::cache::RwCache::new()
-                }
-                #[inline(always)]
-                fn __stability(
-                ) -> &'static crate::cache::RwCache<Image, <Image as crate::Asset>::Value>
-                {
-                    static LAZY: ::lazy_static::lazy::Lazy<
-                        crate::cache::RwCache<Image, <Image as crate::Asset>::Value>,
-                    > = ::lazy_static::lazy::Lazy::INIT;
-                    LAZY.get(__static_ref_initialize)
-                }
-                __stability()
-            }
-        }
-        impl ::lazy_static::LazyStatic for CACHE {
-            fn initialize(lazy: &Self) {
-                let _ = &**lazy;
-            }
-        }
+        pub static mut CACHE: std::sync::OnceLock<
+            crate::cache::RwCache<Image, <Image as crate::Asset>::Value>,
+        > = std::sync::OnceLock::new();
         #[repr(u32)]
         pub enum Image {
             JamjarIcon,
@@ -812,7 +713,7 @@ pub mod example_assets {
         impl crate::CachedAsset for Image {
             type CacheType = crate::cache::RwCache<Self, Self::Value>;
             fn cache() -> &'static Self::CacheType {
-                &CACHE
+                unsafe { CACHE.get_or_init(|| crate::cache::RwCache::new()) }
             }
         }
     }
@@ -822,42 +723,10 @@ pub mod example_assets {
         use super::*;
         use crate::{BytesAsset, FileAsset, StrAsset};
         use std::{borrow::Cow, path::Path, time::SystemTime};
-        #[allow(missing_copy_implementations)]
-        #[allow(non_camel_case_types)]
-        #[allow(dead_code)]
         /// TODO
-        pub struct CACHE {
-            __private_field: (),
-        }
-        #[doc(hidden)]
-        pub static CACHE: CACHE = CACHE {
-            __private_field: (),
-        };
-        impl ::lazy_static::__Deref for CACHE {
-            type Target = crate::cache::RwCache<Text, <Text as crate::Asset>::Value>;
-            fn deref(&self) -> &crate::cache::RwCache<Text, <Text as crate::Asset>::Value> {
-                #[inline(always)]
-                fn __static_ref_initialize(
-                ) -> crate::cache::RwCache<Text, <Text as crate::Asset>::Value> {
-                    crate::cache::RwCache::new()
-                }
-                #[inline(always)]
-                fn __stability(
-                ) -> &'static crate::cache::RwCache<Text, <Text as crate::Asset>::Value>
-                {
-                    static LAZY: ::lazy_static::lazy::Lazy<
-                        crate::cache::RwCache<Text, <Text as crate::Asset>::Value>,
-                    > = ::lazy_static::lazy::Lazy::INIT;
-                    LAZY.get(__static_ref_initialize)
-                }
-                __stability()
-            }
-        }
-        impl ::lazy_static::LazyStatic for CACHE {
-            fn initialize(lazy: &Self) {
-                let _ = &**lazy;
-            }
-        }
+        pub static mut CACHE: std::sync::OnceLock<
+            crate::cache::RwCache<Text, <Text as crate::Asset>::Value>,
+        > = std::sync::OnceLock::new();
         #[repr(u32)]
         pub enum Text {
             Note,
@@ -1090,7 +959,7 @@ pub mod example_assets {
         impl crate::CachedAsset for Text {
             type CacheType = crate::cache::RwCache<Self, Self::Value>;
             fn cache() -> &'static Self::CacheType {
-                &CACHE
+                unsafe { CACHE.get_or_init(|| crate::cache::RwCache::new()) }
             }
         }
     }

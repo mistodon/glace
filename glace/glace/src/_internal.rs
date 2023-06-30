@@ -2,16 +2,15 @@ pub mod load;
 
 use std::{
     path::{Path, PathBuf},
+    sync::OnceLock,
     time::SystemTime,
 };
 
 use crate::{GlaceError, Result};
 use parking_lot::RwLock;
 
-lazy_static::lazy_static! {
-    static ref PATH_CACHE: RwLock<PathCache> = RwLock::new(PathCache::new());
-    static ref NAME_CACHE: RwLock<NameCache> = RwLock::new(NameCache::new());
-}
+static mut PATH_CACHE: OnceLock<RwLock<PathCache>> = OnceLock::new();
+static mut NAME_CACHE: OnceLock<RwLock<NameCache>> = OnceLock::new();
 
 struct PathCache {
     paths: Vec<PathBuf>,
@@ -77,12 +76,14 @@ impl NameCache {
 
 pub fn fetch_path_index(path: &Path) -> u32 {
     let existing = {
-        let c = PATH_CACHE.read();
+        let path_cache = unsafe { PATH_CACHE.get_or_init(|| RwLock::new(PathCache::new())) };
+        let c = path_cache.read();
         c.fetch_path_index(path)
     };
 
     existing.unwrap_or_else(|| {
-        let mut c = PATH_CACHE.write();
+        let path_cache = unsafe { PATH_CACHE.get_or_init(|| RwLock::new(PathCache::new())) };
+        let mut c = path_cache.write();
         c.fetch_path_index(path)
             .unwrap_or_else(|| c.insert_path(path))
     })
@@ -90,24 +91,28 @@ pub fn fetch_path_index(path: &Path) -> u32 {
 
 pub fn fetch_name_index(name: &str) -> u32 {
     let existing = {
-        let c = NAME_CACHE.read();
+        let name_cache = unsafe { NAME_CACHE.get_or_init(|| RwLock::new(NameCache::new())) };
+        let c = name_cache.read();
         c.fetch_name_index(name)
     };
 
     existing.unwrap_or_else(|| {
-        let mut c = NAME_CACHE.write();
+        let name_cache = unsafe { NAME_CACHE.get_or_init(|| RwLock::new(NameCache::new())) };
+        let mut c = name_cache.write();
         c.fetch_name_index(name)
             .unwrap_or_else(|| c.insert_name(name))
     })
 }
 
 pub fn fetch_path(index: u32) -> Result<PathBuf> {
-    let c = PATH_CACHE.read();
+    let path_cache = unsafe { PATH_CACHE.get_or_init(|| RwLock::new(PathCache::new())) };
+    let c = path_cache.read();
     c.fetch_path(index).map(Path::to_owned)
 }
 
 pub fn fetch_name(index: u32) -> Result<String> {
-    let c = NAME_CACHE.read();
+    let name_cache = unsafe { NAME_CACHE.get_or_init(|| RwLock::new(NameCache::new())) };
+    let c = name_cache.read();
     c.fetch_name(index).map(str::to_owned)
 }
 

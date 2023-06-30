@@ -6,9 +6,6 @@ pub use image;
 
 pub use indexmap;
 
-#[cfg(feature = "self_cached")]
-pub use lazy_static;
-
 #[cfg(feature = "serde")]
 pub use serde;
 

@@ -170,17 +170,15 @@ fn cache_and_impl(
             /// TODO
         ));
         let self_cache = quote!(
-            #glace::lazy_static::lazy_static! {
-                #doc
-                pub static ref CACHE: #glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value> = #glace::cache::RwCache::new();
-            }
+            #doc
+            pub static mut CACHE: std::sync::OnceLock<#glace::cache::RwCache<#item_name, <#item_name as #glace::Asset>::Value>> = std::sync::OnceLock::new();
         );
         let cached_impl = quote!(
             impl #glace::CachedAsset for #item_name {
                 type CacheType = #glace::cache::RwCache<Self, Self::Value>;
 
                 fn cache() -> &'static Self::CacheType {
-                    &CACHE
+                    unsafe { CACHE.get_or_init(|| #glace::cache::RwCache::new()) }
                 }
             }
         );
