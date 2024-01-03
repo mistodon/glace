@@ -11,17 +11,17 @@ pub fn load_image(bytes: std::borrow::Cow<[u8]>) -> crate::Result<RgbaImage> {
 
 #[cfg(feature = "serde_json")]
 pub fn load_json<T: for<'a> Deserialize<'a>>(bytes: std::borrow::Cow<[u8]>) -> crate::Result<T> {
-    Ok(serde_json::from_slice(bytes.as_ref()).expect("TODO"))
+    Ok(serde_json::from_slice(bytes.as_ref())?)
 }
 
 #[cfg(feature = "serde_toml")]
 pub fn load_toml<T: for<'a> Deserialize<'a>>(bytes: std::borrow::Cow<[u8]>) -> crate::Result<T> {
-    Ok(toml::from_slice(bytes.as_ref()).expect("TODO"))
+    Ok(toml::from_slice(bytes.as_ref())?)
 }
 
 #[cfg(feature = "serde_yaml")]
 pub fn load_yaml<T: for<'a> Deserialize<'a>>(bytes: std::borrow::Cow<[u8]>) -> crate::Result<T> {
-    Ok(serde_yaml::from_slice(bytes.as_ref()).expect("TODO"))
+    Ok(serde_yaml::from_slice(bytes.as_ref())?)
 }
 
 #[cfg(feature = "serde_json")]

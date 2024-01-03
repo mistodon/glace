@@ -33,11 +33,20 @@ use crate::cache::Cache;
 
 /// A wrapper type for serializing and deserializing asset keys that may or may not have a
 /// path known at compile time.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum PathedKey<'a> {
     Known(&'a str),
     Path { path: &'a Path },
+}
+
+/// An owned wrapper type for serializing and deserializing asset keys that may or may not have a
+/// path known at compile time.
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
+pub enum OwnedPathedKey {
+    Known(String),
+    Path { path: PathBuf },
 }
 
 /// An error type for lookup or parsing errors.
@@ -55,14 +64,26 @@ pub enum GlaceError {
     #[error("Disk IO is disabled so this load will always fail")]
     DiskIoDisabled,
 
-    #[error("IO error")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("UTF8 error")]
+    #[error("UTF8 error: {0}")]
     Utf8(#[from] std::str::Utf8Error),
 
-    #[error("UTF8 error")]
+    #[error("UTF8 error: {0}")]
     FromUtf8(#[from] std::string::FromUtf8Error),
+
+    #[cfg(feature = "serde_json")]
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[cfg(feature = "serde_toml")]
+    #[error("TOML error: {0}")]
+    Toml(#[from] toml::de::Error),
+
+    #[cfg(feature = "serde_yaml")]
+    #[error("YAML error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
 }
 
 /// Result type for this crate.

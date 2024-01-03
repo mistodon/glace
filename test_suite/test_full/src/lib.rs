@@ -57,4 +57,40 @@ mod tests {
         assert_eq!(VirtualYaml::ALL, &[VirtualYaml::Key1, VirtualYaml::Key2]);
         assert_eq!(SingleYaml, SingleYaml);
     }
+
+    #[test]
+    fn serialization() {
+        let file_variant = Yaml::FileA;
+        let missing_file = Yaml::from_path("../data/yaml/fake.yaml");
+        let virtual_variant = VirtualYaml::Key1;
+        let missing_virtual = VirtualYaml::from_name("Fake");
+        let single_yaml = SingleYaml;
+
+        assert_eq!(serde_yaml::to_string(&[file_variant]).unwrap(), "---\n- FileA\n");
+        assert_eq!(serde_yaml::to_string(&[missing_file]).unwrap(), "---\n- path: \"../data/yaml/fake.yaml\"\n");
+        assert_eq!(serde_yaml::to_string(&[virtual_variant]).unwrap(), "---\n- Key1\n");
+        assert_eq!(serde_yaml::to_string(&[missing_virtual]).unwrap(), "---\n- Fake\n");
+        assert_eq!(serde_yaml::to_string(&[single_yaml]).unwrap(), "---\n- ~\n");
+    }
+
+    #[test]
+    fn deserialization() {
+        let file_variant = "- FileA";
+        let missing_file = "- path: \"../data/yaml/fake.yaml\"";
+        let virtual_variant = "- Key1";
+        let missing_virtual = "- Fake";
+        let single_yaml = "- ~";
+
+        let file_variant: Vec<Yaml> = serde_yaml::from_str(file_variant).unwrap();
+        let missing_file: Vec<Yaml> = serde_yaml::from_str(missing_file).unwrap();
+        let virtual_variant: Vec<VirtualYaml> = serde_yaml::from_str(virtual_variant).unwrap();
+        let missing_virtual: Vec<VirtualYaml> = serde_yaml::from_str(missing_virtual).unwrap();
+        let single_yaml: Vec<SingleYaml> =  serde_yaml::from_str(single_yaml).unwrap();
+
+        assert_eq!(file_variant, vec![Yaml::FileA]);
+        assert_eq!(missing_file, vec![Yaml::_Unknown(0)]);
+        assert_eq!(virtual_variant, vec![VirtualYaml::Key1]);
+        assert_eq!(missing_virtual, vec![VirtualYaml::_Unknown(0)]);
+        assert_eq!(single_yaml, vec![SingleYaml]);
+    }
 }

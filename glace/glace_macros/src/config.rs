@@ -116,7 +116,7 @@ impl Config {
     }
 
     pub fn file_type<P: AsRef<Path>>(&self, _paths: &[P]) -> FileType {
-        self.explicit_file_type.unwrap_or_else(|| {
+        self.explicit_file_type.unwrap_or({
             #[cfg(feature = "image")]
             {
                 if !_paths.is_empty()

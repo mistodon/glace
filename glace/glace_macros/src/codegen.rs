@@ -622,10 +622,10 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
                 where
                     D: #glace::serde::Deserializer<'de>
                 {
-                    let key: #glace::PathedKey = #glace::PathedKey::deserialize::<D>(deserializer)?;
+                    let key: #glace::OwnedPathedKey = #glace::OwnedPathedKey::deserialize::<D>(deserializer)?;
                     Ok(match key {
-                        #glace::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                        #glace::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
+                        #glace::OwnedPathedKey::Known(name) => Self::from_const_name(&name).unwrap_or_else(|| panic!("Expected {} to be a known variant of type `{}`, but deserializing failed to match the name", name, std::any::type_name::<#enum_name>())),
+                        #glace::OwnedPathedKey::Path { path } => Self::try_from_path(&path).unwrap_or_else(|e| panic!("Deserializing a value of `{}` from the path `{}` failed\n{}", std::any::type_name::<#enum_name>(), path.display(), e)),
                     })
                 }
             }
@@ -1059,24 +1059,24 @@ fn gen_virtual_mod(
                     quote!({
                         let source = std::fs::read(Self::PATH)?;
                         let mut all = Self::try_load_all(&source)?;
-                        Cow::Owned(all.remove(self).expect("TODO"))
+                        Cow::Owned(all.remove(self).unwrap_or_else(|| panic!("Failed to load bytes for variant `{}` of type `{}` (generated from file at {}). There is no corresponding key in that file.", self.name(), std::any::type_name::<#enum_name>(), Self::PATH)))
                     }),
                     quote!(Ok(match #glace::_internal::fetch_bytes_modified(Self::PATH.as_ref(), previous_modified)? {
                         Some((bytes, time)) => {
                             let mut all = Self::try_load_all(&bytes)?;
-                            Some((all.remove(self).expect("TODO"), time))
+                            Some((all.remove(self).expect("valie not present in virtual try_bytes_modified"), time))
                         }
                         None => None,
                     })),
                     quote!(
                         let source = std::fs::read(Self::PATH)?;
                         let mut all = Self::try_load_all(&source)?;
-                        Ok(all.remove(self).expect("TODO"))
+                        Ok(all.remove(self).expect("value not present in try_load_bytes"))
                     ),
                     quote!({
                         let source = std::fs::read(Self::PATH)?;
                         let mut all = Self::try_load_all(&source)?;
-                        Cow::Owned(String::from_utf8(all.remove(self).expect("TODO"))?)
+                        Cow::Owned(String::from_utf8(all.remove(self).expect("value not present in try_string"))?)
                     }),
                 ],
                 false => [
@@ -1188,8 +1188,8 @@ fn gen_virtual_mod(
             where
                 D: #glace::serde::Deserializer<'de>
             {
-                let name: &'de str = <&'de str as #glace::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
-                Ok(Self::from_name(name))
+                let name: String = <String as #glace::serde::Deserialize<'de>>::deserialize::<D>(deserializer)?;
+                Ok(Self::from_name(&name))
             }
         }
     ));
