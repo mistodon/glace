@@ -11,7 +11,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-use crate::config::{AssetType, Config, Context, FileType, ModType, StringyTokens};
+use crate::config::{AssetType, Config, Context, FileType, ModType, SetBool, StringyTokens};
 
 fn docs(_tokens: TokenStream) -> Option<TokenStream> {
     #[cfg(feature = "example_docs")]
@@ -165,7 +165,9 @@ fn cache_and_impl(
     is_asset: bool,
     config: &Config,
 ) -> (Option<TokenStream>, Option<TokenStream>) {
-    if config.self_cached && is_asset {
+    let explicit = config.self_cached == SetBool::Explicit(true);
+    let inferred = config.self_cached == SetBool::Inferred(true);
+    if explicit || (inferred && is_asset) {
         let doc = docs(quote!(
             /// TODO
         ));

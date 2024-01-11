@@ -93,11 +93,17 @@ pub enum AssetType {
     None,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetBool {
+    Inferred(bool),
+    Explicit(bool),
+}
+
 #[derive(Clone)]
 pub struct Config {
     pub const_data: bool,
     pub disk_io: bool,
-    pub self_cached: bool,
+    pub self_cached: SetBool,
     pub impl_serde: bool,
     pub allow_edres: bool,
     pub mod_type: ModType,
@@ -175,7 +181,7 @@ pub struct Context {
     pub root_mod_name: String,
     pub const_data: bool,
     pub disk_io: bool,
-    pub self_cached: bool,
+    pub self_cached: SetBool,
     pub impl_serde: bool,
     pub allow_edres: bool,
     pub overrides: HashMap<PathBuf, Config>,
@@ -249,7 +255,7 @@ impl From<GlaceMacro> for Context {
     fn from(call: GlaceMacro) -> Context {
         let const_data = cfg!(feature = "const_data");
         let disk_io = cfg!(feature = "disk_io");
-        let self_cached = cfg!(feature = "self_cached");
+        let self_cached = SetBool::Inferred(cfg!(feature = "self_cached"));
         let impl_serde = cfg!(feature = "serde");
         let allow_edres = cfg!(feature = "edres");
 
@@ -270,8 +276,8 @@ impl From<GlaceMacro> for Context {
 
             for prop in props {
                 match prop {
-                    Property::WithCache => config.self_cached = true,
-                    Property::NoCache => config.self_cached = false,
+                    Property::WithCache => config.self_cached = SetBool::Explicit(true),
+                    Property::NoCache => config.self_cached = SetBool::Explicit(false),
                     Property::WithConst => config.const_data = true,
                     Property::NoConst => config.const_data = false,
                     Property::WithIO => config.disk_io = true,
