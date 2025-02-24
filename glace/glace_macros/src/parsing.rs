@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use syn::{
+    Attribute, Ident, Token, Visibility,
     parse::{Error, Parse, ParseStream, Result as ParseResult},
     punctuated::Punctuated,
-    Attribute, Ident, Token, Visibility,
 };
 
 use crate::codegen::ident;

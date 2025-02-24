@@ -3,5 +3,5 @@
 set -eu
 set -o pipefail
 
-(cd glace/example_docs && cargo expand | sed 's/#\[no_coverage\]//g' | sed 's/::tempname//g' | tail -n +8 > ../glace/src/_example_docs.rs)
+(cd glace/example_docs && cargo expand | sed 's/#\[coverage(off)\]//g' | sed 's/::tempname//g' | tail -n +8 > ../glace/src/_example_docs.rs)
 (cd glace/glace && cargo fmt)

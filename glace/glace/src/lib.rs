@@ -55,10 +55,14 @@ pub enum GlaceError {
     #[error("Path `{0}` is not under the correct parent directory (`{1}`)")]
     MismatchedParent(PathBuf, PathBuf),
 
-    #[error("No Path cached for the given index: `{0}`\nUse the `from_path` method instead of constructing a `_Unknown(_)` variant directly.")]
+    #[error(
+        "No Path cached for the given index: `{0}`\nUse the `from_path` method instead of constructing a `_Unknown(_)` variant directly."
+    )]
     NoPathCached(u32),
 
-    #[error("No name cached for the given index: `{0}`\nUse the `from_name` method instead of constructing an `_Unknown(_)` variant directly.")]
+    #[error(
+        "No name cached for the given index: `{0}`\nUse the `from_name` method instead of constructing an `_Unknown(_)` variant directly."
+    )]
     NoNameCached(u32),
 
     #[error("Disk IO is disabled so this load will always fail")]

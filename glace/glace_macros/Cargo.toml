@@ -1,7 +1,7 @@
 [package]
 name = "glace_macros"
-version = "0.1.0"
-edition = "2021"
+version = "0.3.0"
+edition = "2024"
 authors = ["Vi <violet@hey.com>"]
 description = "Internals for the glace crate."
 homepage = "https://github.com/mistodon/glace"

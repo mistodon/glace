@@ -66,10 +66,22 @@ mod tests {
         let missing_virtual = VirtualYaml::from_name("Fake");
         let single_yaml = SingleYaml;
 
-        assert_eq!(serde_yaml::to_string(&[file_variant]).unwrap(), "---\n- FileA\n");
-        assert_eq!(serde_yaml::to_string(&[missing_file]).unwrap(), "---\n- path: \"../data/yaml/fake.yaml\"\n");
-        assert_eq!(serde_yaml::to_string(&[virtual_variant]).unwrap(), "---\n- Key1\n");
-        assert_eq!(serde_yaml::to_string(&[missing_virtual]).unwrap(), "---\n- Fake\n");
+        assert_eq!(
+            serde_yaml::to_string(&[file_variant]).unwrap(),
+            "---\n- FileA\n"
+        );
+        assert_eq!(
+            serde_yaml::to_string(&[missing_file]).unwrap(),
+            "---\n- path: \"../data/yaml/fake.yaml\"\n"
+        );
+        assert_eq!(
+            serde_yaml::to_string(&[virtual_variant]).unwrap(),
+            "---\n- Key1\n"
+        );
+        assert_eq!(
+            serde_yaml::to_string(&[missing_virtual]).unwrap(),
+            "---\n- Fake\n"
+        );
         assert_eq!(serde_yaml::to_string(&[single_yaml]).unwrap(), "---\n- ~\n");
     }
 
@@ -85,7 +97,7 @@ mod tests {
         let missing_file: Vec<Yaml> = serde_yaml::from_str(missing_file).unwrap();
         let virtual_variant: Vec<VirtualYaml> = serde_yaml::from_str(virtual_variant).unwrap();
         let missing_virtual: Vec<VirtualYaml> = serde_yaml::from_str(missing_virtual).unwrap();
-        let single_yaml: Vec<SingleYaml> =  serde_yaml::from_str(single_yaml).unwrap();
+        let single_yaml: Vec<SingleYaml> = serde_yaml::from_str(single_yaml).unwrap();
 
         assert_eq!(file_variant, vec![Yaml::FileA]);
         assert_eq!(missing_file, vec![Yaml::_Unknown(0)]);

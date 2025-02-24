@@ -4,7 +4,7 @@ use std::{
 };
 
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{Ident, Type};
 
 use crate::{
@@ -210,7 +210,7 @@ impl Context {
     }
 
     pub fn is_normal(&self, path: &Path) -> bool {
-        self.overrides.get(self.fix_path(path)).is_none()
+        !self.overrides.contains_key(self.fix_path(path))
     }
 
     pub fn is_ignored(&self, path: &Path) -> bool {

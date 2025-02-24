@@ -212,9 +212,11 @@ mod tests {
 
         assert!(Notes::Note1.bytes_modified(Some(time1)).is_none());
         assert!(secret_note.bytes_modified(Some(time2)).is_none());
-        assert!(Notes::Note1
-            .bytes_modified(Some(SystemTime::UNIX_EPOCH))
-            .is_some());
+        assert!(
+            Notes::Note1
+                .bytes_modified(Some(SystemTime::UNIX_EPOCH))
+                .is_some()
+        );
     }
 
     #[test]

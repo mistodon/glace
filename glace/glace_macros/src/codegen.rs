@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::{Result, eyre};
 use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -542,17 +542,20 @@ fn gen_dir_mod(context: Arc<Context>, spec: &ModSpec, item_name: &str) -> Result
             let value_str_name = format!("{}Value", item_name);
             let value_name = ident(&value_str_name);
             let format: edres::Format = match file_type {
-                    #[cfg(feature = "edres_json")]
-                    FileType::Json => edres::Format::Json,
+                #[cfg(feature = "edres_json")]
+                FileType::Json => edres::Format::Json,
 
-                    #[cfg(feature = "edres_toml")]
-                    FileType::Toml => edres::Format::Toml,
+                #[cfg(feature = "edres_toml")]
+                FileType::Toml => edres::Format::Toml,
 
-                    #[cfg(feature = "edres_yaml")]
-                    FileType::Yaml => edres::Format::Yaml,
+                #[cfg(feature = "edres_yaml")]
+                FileType::Yaml => edres::Format::Yaml,
 
-                    _ => Err(eyre!("edres cannot generate types for {:?} files with the currently enabled features", file_type))?,
-                };
+                _ => Err(eyre!(
+                    "edres cannot generate types for {:?} files with the currently enabled features",
+                    file_type
+                ))?,
+            };
 
             let tokens = Some(edres::codegen::define_structs_from_file_contents(
                 &spec.path,
@@ -839,23 +842,26 @@ fn gen_single_mod(
             let value_str_name = format!("{}Value", item_name);
             let value_name = ident(&value_str_name);
             let value = match file_type {
-                    #[cfg(feature = "edres_json")]
-                    FileType::Json => {
-                        edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
-                    }
+                #[cfg(feature = "edres_json")]
+                FileType::Json => {
+                    edres::parsing::json::parse_source(&source, &edres::ParseOptions::new())?
+                }
 
-                    #[cfg(feature = "edres_toml")]
-                    FileType::Toml => {
-                        edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
-                    }
+                #[cfg(feature = "edres_toml")]
+                FileType::Toml => {
+                    edres::parsing::toml::parse_source(&source, &edres::ParseOptions::new())?
+                }
 
-                    #[cfg(feature = "edres_yaml")]
-                    FileType::Yaml => {
-                        edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
-                    }
+                #[cfg(feature = "edres_yaml")]
+                FileType::Yaml => {
+                    edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
+                }
 
-                    _ => Err(eyre!("edres cannot generate types for {:?} files with the currently enabled features", file_type))?,
-                };
+                _ => Err(eyre!(
+                    "edres cannot generate types for {:?} files with the currently enabled features",
+                    file_type
+                ))?,
+            };
 
             let tokens = Some(edres::codegen::define_structs(
                 &value.assume_struct()?,
@@ -1146,7 +1152,10 @@ fn gen_virtual_mod(
                     edres::parsing::yaml::parse_source(&source, &edres::ParseOptions::new())?
                 }
 
-                _ => Err(eyre!("edres cannot generate types for {:?} files with the currently enabled features", file_type))?,
+                _ => Err(eyre!(
+                    "edres cannot generate types for {:?} files with the currently enabled features",
+                    file_type
+                ))?,
             };
 
             let tokens = Some(edres::codegen::define_structs_from_values(

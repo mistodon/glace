@@ -22,10 +22,10 @@ pub fn glace(stream: TokenStream) -> TokenStream {
 
     unsafe {
         size_test::<SizeTest>();
-        discriminant_test(transmute(LayoutTest::Zero), 0);
-        discriminant_test(transmute(LayoutTest::One), 1);
-        discriminant_test(transmute(LayoutTest::Other(123)), 2);
-        field_test(transmute(LayoutTest::Other(123)), 123);
+        discriminant_test(transmute::<LayoutTest, u64>(LayoutTest::Zero), 0);
+        discriminant_test(transmute::<LayoutTest, u64>(LayoutTest::One), 1);
+        discriminant_test(transmute::<LayoutTest, u64>(LayoutTest::Other(123)), 2);
+        field_test(transmute::<LayoutTest, u64>(LayoutTest::Other(123)), 123);
     }
 
     let call: GlaceMacro = parse_macro_input!(stream as GlaceMacro);

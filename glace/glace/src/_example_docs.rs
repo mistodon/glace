@@ -21,6 +21,7 @@ pub mod example_assets {
     }
     #[automatically_derived]
     impl ::core::fmt::Debug for ExampleAssets {
+        #[inline]
         fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
             match self {
                 ExampleAssets::_Unknown(__self_0) => {
@@ -47,13 +48,11 @@ pub mod example_assets {
         fn eq(&self, other: &ExampleAssets) -> bool {
             match (self, other) {
                 (ExampleAssets::_Unknown(__self_0), ExampleAssets::_Unknown(__arg1_0)) => {
-                    *__self_0 == *__arg1_0
+                    __self_0 == __arg1_0
                 }
             }
         }
     }
-    #[automatically_derived]
-    impl ::core::marker::StructuralEq for ExampleAssets {}
     #[automatically_derived]
     impl ::core::cmp::Eq for ExampleAssets {
         #[inline]
@@ -185,11 +184,33 @@ pub mod example_assets {
         where
             D: crate::serde::Deserializer<'de>,
         {
-            let key: crate::PathedKey = crate::PathedKey::deserialize::<D>(deserializer)?;
-            Ok(match key {
-                crate::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                crate::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
-            })
+            let key: crate::OwnedPathedKey = crate::OwnedPathedKey::deserialize::<D>(deserializer)?;
+            Ok(
+                match key {
+                    crate::OwnedPathedKey::Known(name) => {
+                        Self::from_const_name(&name)
+                            .unwrap_or_else(|| {
+                                ::core::panicking::panic_fmt(
+                                    format_args!(
+                                        "Expected {0} to be a known variant of type `{1}`, but deserializing failed to match the name",
+                                        name, std::any::type_name::< ExampleAssets > ()
+                                    ),
+                                );
+                            })
+                    }
+                    crate::OwnedPathedKey::Path { path } => {
+                        Self::try_from_path(&path)
+                            .unwrap_or_else(|e| {
+                                ::core::panicking::panic_fmt(
+                                    format_args!(
+                                        "Deserializing a value of `{0}` from the path `{1}` failed\n{2}",
+                                        std::any::type_name::< ExampleAssets > (), path.display(), e
+                                    ),
+                                );
+                            })
+                    }
+                },
+            )
         }
     }
     impl BytesAsset for ExampleAssets {
@@ -246,6 +267,7 @@ pub mod example_assets {
         }
         #[automatically_derived]
         impl ::core::fmt::Debug for Audio {
+            #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 match self {
                     Audio::EmptyWavFile => ::core::fmt::Formatter::write_str(f, "EmptyWavFile"),
@@ -271,19 +293,17 @@ pub mod example_assets {
         impl ::core::cmp::PartialEq for Audio {
             #[inline]
             fn eq(&self, other: &Audio) -> bool {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                __self_tag == __arg1_tag
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                __self_discr == __arg1_discr
                     && match (self, other) {
                         (Audio::_Unknown(__self_0), Audio::_Unknown(__arg1_0)) => {
-                            *__self_0 == *__arg1_0
+                            __self_0 == __arg1_0
                         }
                         _ => true,
                     }
             }
         }
-        #[automatically_derived]
-        impl ::core::marker::StructuralEq for Audio {}
         #[automatically_derived]
         impl ::core::cmp::Eq for Audio {
             #[inline]
@@ -297,13 +317,13 @@ pub mod example_assets {
         impl ::core::cmp::PartialOrd for Audio {
             #[inline]
             fn partial_cmp(&self, other: &Audio) -> ::core::option::Option<::core::cmp::Ordering> {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
                 match (self, other) {
                     (Audio::_Unknown(__self_0), Audio::_Unknown(__arg1_0)) => {
                         ::core::cmp::PartialOrd::partial_cmp(__self_0, __arg1_0)
                     }
-                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_tag, &__arg1_tag),
+                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_discr, &__arg1_discr),
                 }
             }
         }
@@ -311,9 +331,9 @@ pub mod example_assets {
         impl ::core::cmp::Ord for Audio {
             #[inline]
             fn cmp(&self, other: &Audio) -> ::core::cmp::Ordering {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                match ::core::cmp::Ord::cmp(&__self_tag, &__arg1_tag) {
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                match ::core::cmp::Ord::cmp(&__self_discr, &__arg1_discr) {
                     ::core::cmp::Ordering::Equal => match (self, other) {
                         (Audio::_Unknown(__self_0), Audio::_Unknown(__arg1_0)) => {
                             ::core::cmp::Ord::cmp(__self_0, __arg1_0)
@@ -328,8 +348,8 @@ pub mod example_assets {
         impl ::core::hash::Hash for Audio {
             #[inline]
             fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                ::core::hash::Hash::hash(&__self_tag, state);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                ::core::hash::Hash::hash(&__self_discr, state);
                 match self {
                     Audio::_Unknown(__self_0) => ::core::hash::Hash::hash(__self_0, state),
                     _ => {}
@@ -424,11 +444,34 @@ pub mod example_assets {
             where
                 D: crate::serde::Deserializer<'de>,
             {
-                let key: crate::PathedKey = crate::PathedKey::deserialize::<D>(deserializer)?;
-                Ok(match key {
-                    crate::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                    crate::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
-                })
+                let key: crate::OwnedPathedKey =
+                    crate::OwnedPathedKey::deserialize::<D>(deserializer)?;
+                Ok(
+                    match key {
+                        crate::OwnedPathedKey::Known(name) => {
+                            Self::from_const_name(&name)
+                                .unwrap_or_else(|| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Expected {0} to be a known variant of type `{1}`, but deserializing failed to match the name",
+                                            name, std::any::type_name::< Audio > ()
+                                        ),
+                                    );
+                                })
+                        }
+                        crate::OwnedPathedKey::Path { path } => {
+                            Self::try_from_path(&path)
+                                .unwrap_or_else(|e| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Deserializing a value of `{0}` from the path `{1}` failed\n{2}",
+                                            std::any::type_name::< Audio > (), path.display(), e
+                                        ),
+                                    );
+                                })
+                        }
+                    },
+                )
             }
         }
         impl BytesAsset for Audio {
@@ -487,6 +530,7 @@ pub mod example_assets {
         }
         #[automatically_derived]
         impl ::core::fmt::Debug for Image {
+            #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 match self {
                     Image::JamjarIcon => ::core::fmt::Formatter::write_str(f, "JamjarIcon"),
@@ -513,19 +557,17 @@ pub mod example_assets {
         impl ::core::cmp::PartialEq for Image {
             #[inline]
             fn eq(&self, other: &Image) -> bool {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                __self_tag == __arg1_tag
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                __self_discr == __arg1_discr
                     && match (self, other) {
                         (Image::_Unknown(__self_0), Image::_Unknown(__arg1_0)) => {
-                            *__self_0 == *__arg1_0
+                            __self_0 == __arg1_0
                         }
                         _ => true,
                     }
             }
         }
-        #[automatically_derived]
-        impl ::core::marker::StructuralEq for Image {}
         #[automatically_derived]
         impl ::core::cmp::Eq for Image {
             #[inline]
@@ -539,13 +581,13 @@ pub mod example_assets {
         impl ::core::cmp::PartialOrd for Image {
             #[inline]
             fn partial_cmp(&self, other: &Image) -> ::core::option::Option<::core::cmp::Ordering> {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
                 match (self, other) {
                     (Image::_Unknown(__self_0), Image::_Unknown(__arg1_0)) => {
                         ::core::cmp::PartialOrd::partial_cmp(__self_0, __arg1_0)
                     }
-                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_tag, &__arg1_tag),
+                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_discr, &__arg1_discr),
                 }
             }
         }
@@ -553,9 +595,9 @@ pub mod example_assets {
         impl ::core::cmp::Ord for Image {
             #[inline]
             fn cmp(&self, other: &Image) -> ::core::cmp::Ordering {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                match ::core::cmp::Ord::cmp(&__self_tag, &__arg1_tag) {
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                match ::core::cmp::Ord::cmp(&__self_discr, &__arg1_discr) {
                     ::core::cmp::Ordering::Equal => match (self, other) {
                         (Image::_Unknown(__self_0), Image::_Unknown(__arg1_0)) => {
                             ::core::cmp::Ord::cmp(__self_0, __arg1_0)
@@ -570,8 +612,8 @@ pub mod example_assets {
         impl ::core::hash::Hash for Image {
             #[inline]
             fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                ::core::hash::Hash::hash(&__self_tag, state);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                ::core::hash::Hash::hash(&__self_discr, state);
                 match self {
                     Image::_Unknown(__self_0) => ::core::hash::Hash::hash(__self_0, state),
                     _ => {}
@@ -672,11 +714,34 @@ pub mod example_assets {
             where
                 D: crate::serde::Deserializer<'de>,
             {
-                let key: crate::PathedKey = crate::PathedKey::deserialize::<D>(deserializer)?;
-                Ok(match key {
-                    crate::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                    crate::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
-                })
+                let key: crate::OwnedPathedKey =
+                    crate::OwnedPathedKey::deserialize::<D>(deserializer)?;
+                Ok(
+                    match key {
+                        crate::OwnedPathedKey::Known(name) => {
+                            Self::from_const_name(&name)
+                                .unwrap_or_else(|| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Expected {0} to be a known variant of type `{1}`, but deserializing failed to match the name",
+                                            name, std::any::type_name::< Image > ()
+                                        ),
+                                    );
+                                })
+                        }
+                        crate::OwnedPathedKey::Path { path } => {
+                            Self::try_from_path(&path)
+                                .unwrap_or_else(|e| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Deserializing a value of `{0}` from the path `{1}` failed\n{2}",
+                                            std::any::type_name::< Image > (), path.display(), e
+                                        ),
+                                    );
+                                })
+                        }
+                    },
+                )
             }
         }
         impl BytesAsset for Image {
@@ -735,6 +800,7 @@ pub mod example_assets {
         }
         #[automatically_derived]
         impl ::core::fmt::Debug for Text {
+            #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 match self {
                     Text::Note => ::core::fmt::Formatter::write_str(f, "Note"),
@@ -761,19 +827,17 @@ pub mod example_assets {
         impl ::core::cmp::PartialEq for Text {
             #[inline]
             fn eq(&self, other: &Text) -> bool {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                __self_tag == __arg1_tag
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                __self_discr == __arg1_discr
                     && match (self, other) {
                         (Text::_Unknown(__self_0), Text::_Unknown(__arg1_0)) => {
-                            *__self_0 == *__arg1_0
+                            __self_0 == __arg1_0
                         }
                         _ => true,
                     }
             }
         }
-        #[automatically_derived]
-        impl ::core::marker::StructuralEq for Text {}
         #[automatically_derived]
         impl ::core::cmp::Eq for Text {
             #[inline]
@@ -787,13 +851,13 @@ pub mod example_assets {
         impl ::core::cmp::PartialOrd for Text {
             #[inline]
             fn partial_cmp(&self, other: &Text) -> ::core::option::Option<::core::cmp::Ordering> {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
                 match (self, other) {
                     (Text::_Unknown(__self_0), Text::_Unknown(__arg1_0)) => {
                         ::core::cmp::PartialOrd::partial_cmp(__self_0, __arg1_0)
                     }
-                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_tag, &__arg1_tag),
+                    _ => ::core::cmp::PartialOrd::partial_cmp(&__self_discr, &__arg1_discr),
                 }
             }
         }
@@ -801,9 +865,9 @@ pub mod example_assets {
         impl ::core::cmp::Ord for Text {
             #[inline]
             fn cmp(&self, other: &Text) -> ::core::cmp::Ordering {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-                match ::core::cmp::Ord::cmp(&__self_tag, &__arg1_tag) {
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+                match ::core::cmp::Ord::cmp(&__self_discr, &__arg1_discr) {
                     ::core::cmp::Ordering::Equal => match (self, other) {
                         (Text::_Unknown(__self_0), Text::_Unknown(__arg1_0)) => {
                             ::core::cmp::Ord::cmp(__self_0, __arg1_0)
@@ -818,8 +882,8 @@ pub mod example_assets {
         impl ::core::hash::Hash for Text {
             #[inline]
             fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {
-                let __self_tag = ::core::intrinsics::discriminant_value(self);
-                ::core::hash::Hash::hash(&__self_tag, state);
+                let __self_discr = ::core::intrinsics::discriminant_value(self);
+                ::core::hash::Hash::hash(&__self_discr, state);
                 match self {
                     Text::_Unknown(__self_0) => ::core::hash::Hash::hash(__self_0, state),
                     _ => {}
@@ -918,11 +982,34 @@ pub mod example_assets {
             where
                 D: crate::serde::Deserializer<'de>,
             {
-                let key: crate::PathedKey = crate::PathedKey::deserialize::<D>(deserializer)?;
-                Ok(match key {
-                    crate::PathedKey::Known(name) => Self::from_const_name(name).expect("TODO"),
-                    crate::PathedKey::Path { path } => Self::try_from_path(path).expect("TODO"),
-                })
+                let key: crate::OwnedPathedKey =
+                    crate::OwnedPathedKey::deserialize::<D>(deserializer)?;
+                Ok(
+                    match key {
+                        crate::OwnedPathedKey::Known(name) => {
+                            Self::from_const_name(&name)
+                                .unwrap_or_else(|| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Expected {0} to be a known variant of type `{1}`, but deserializing failed to match the name",
+                                            name, std::any::type_name::< Text > ()
+                                        ),
+                                    );
+                                })
+                        }
+                        crate::OwnedPathedKey::Path { path } => {
+                            Self::try_from_path(&path)
+                                .unwrap_or_else(|e| {
+                                    ::core::panicking::panic_fmt(
+                                        format_args!(
+                                            "Deserializing a value of `{0}` from the path `{1}` failed\n{2}",
+                                            std::any::type_name::< Text > (), path.display(), e
+                                        ),
+                                    );
+                                })
+                        }
+                    },
+                )
             }
         }
         impl BytesAsset for Text {
