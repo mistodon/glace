@@ -6,7 +6,7 @@ authors = ["Vi <violet@hey.com>"]
 description = "Internals for the glace crate."
 homepage = "https://github.com/mistodon/glace"
 repository = "https://github.com/mistodon/glace"
-readme = "../README.md"
+readme = "../../README.md"
 license = "CC0-1.0"
 
 [lib]
